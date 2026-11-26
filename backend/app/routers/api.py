@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -188,7 +188,7 @@ class ModelsIn(BaseModel):
 
 
 @router.post("/providers/{key}/models")
-async def provider_models(key: str, body: ModelsIn) -> dict:
+async def provider_models(key: str, body: ModelsIn, request: Request) -> dict:
     """Validate an API key (typed now or already stored) and list its models.
     Used by the UI to auto-populate the model dropdowns. Never logs/echoes
     the token — only the result travels back."""
@@ -196,10 +196,17 @@ async def provider_models(key: str, body: ModelsIn) -> dict:
     from ..provider import fetch_models
     if key not in PROVIDER_PRESETS:
         raise HTTPException(404, "unknown provider")
+    from ..hosted_settings import refresh
+    refresh()
     preset = PROVIDER_PRESETS[key]
     creds = (settings.provider_creds or {}).get(key) or {}
     base = ((body.base_url or creds.get("base_url") or preset["base_url"])
             .strip().rstrip("/"))
+    from .. import admin
+    identity = getattr(request.state, 'identity', None)
+    saved_base = (creds.get('base_url') or preset['base_url']).strip().rstrip('/')
+    if identity and not admin.permits(identity, 'connections', True) and (base != saved_base or body.token):
+        raise HTTPException(403, 'Manage connections permission is required to test edited credentials or endpoints.')
     token = (body.token or creds.get("token") or "").strip()
     return await fetch_models(key, base, token)
 
@@ -282,6 +289,7 @@ def get_agents() -> list[dict]:
     out = []
     for a in agentreg.list_agents():
         mem = db.get_memory("agent", a["id"], 5)
+        a["enabled"] = db.kv_get("agent_enabled_" + a["id"], "1") != "0"
         a["memory"] = mem
         a["next_level_xp"] = (a["level"]) * 100
         out.append(a)

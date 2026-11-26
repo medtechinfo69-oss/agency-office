@@ -74,3 +74,21 @@ def test_supabase_pooler_uses_bundled_ca_and_preserves_hostname_verification(mon
     monkeypatch.setenv('DATABASE_URL', 'postgresql://test:fake@other.example/postgres?sslmode=verify-full&sslrootcert=system')
     Connection('agency_office')
     assert connect.call_args.kwargs['sslrootcert'] == 'system'
+
+
+@pytest.mark.skipif(not os.getenv('TEST_POSTGRES_URL'), reason='Requires disposable local PostgreSQL')
+def test_admin_schema_postgres(monkeypatch):
+    url = os.environ['TEST_POSTGRES_URL']
+    assert 'host=/tmp/' in url or '@localhost' in url or '@127.0.0.1' in url
+    monkeypatch.setenv('DATABASE_URL', url)
+    from app import db, admin
+    monkeypatch.setattr(db, '_conn', None)
+    admin.initialize()
+    token = admin.invite(admin.Invite(name='Postgres test', email='pg-invite@example.test', role='Viewer'))['invite_token']
+    assert admin.accept_invite(admin.Accept(token=token,password='postgres-test-password'))['ok']
+    assert admin.login('pg-invite@example.test','postgres-test-password','unused')
+    minted=admin.create_key(admin.Key(name='Postgres key',role='Viewer'))
+    assert admin.key_identity(minted['token'])['role']=='Viewer'
+    db.execute("DELETE FROM admin_users WHERE email='pg-invite@example.test'")
+    db.execute("DELETE FROM admin_keys WHERE name='Postgres key'")
+    db._conn.close()

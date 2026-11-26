@@ -209,3 +209,46 @@ Supabase pooler TLS uses the bundled **public** root certificate under
 with `sslrootcert=system` (or no explicit CA path). Chain and hostname verification
 remain enabled. Site Builder prompt assets now live in `backend/prompts/` so
 Vercel can package them without parent-directory paths.
+
+## Workspace administration (v1.1)
+
+The nine administration pages use `#settings/<section>` routes. The default UI
+is dark, with self-hosted Inter (400/600), tokenized light/dark colors, an
+indigo/blue accent preference and comfortable/compact density.
+
+Administration adds `admin_users`, `admin_roles`, and `admin_keys` in the existing
+private Office schema on startup. Initialization uses `IF NOT EXISTS` and
+`ON CONFLICT DO NOTHING`: existing settings, credentials, role policies, users,
+and projects are not reset. No new hosting environment variables are required.
+
+- Existing owner sign-in still works with the email field left blank. The owner
+  cannot be deleted or demoted. A password changed through Account is stored as
+  a salted PBKDF2-SHA256 hash in the database; subsequent owner logins use it
+  instead of the initial ACCESS_PASSWORD. Password changes invalidate sessions.
+- Users invitations are 24-hour single-use links. The owner copies and delivers
+  them securely; the app does **not** claim to send email. Tokens are hashed in
+  the database and removed from the browser URL when accepting an invitation.
+- Invited users sign in with email and password. All users share one workspace;
+  this is not tenant isolation. Resource read/manage policies are enforced by
+  middleware on existing API routes, not just hidden in the UI. Owner remains
+  an immutable full-access identity. The old agent planning matrix remains
+  separate and is explicitly non-enforcing.
+- Workspace API keys use `Authorization: Bearer ao_...`. The full value is shown
+  once on creation/regeneration; only a hash/prefix is stored. Regeneration and
+  revocation invalidate the old key immediately. Keys cannot manage a personal
+  account. Deleting a user invalidates their sessions, not workspace-scoped keys.
+- Agent Stop blocks new task execution; Start re-enables assignment execution.
+  Neither fabricates a persistent runtime or force-kills in-flight provider calls.
+- Instance shows real metadata. Vercel exposes no in-app restart capability here;
+  the confirmed management action opens the Vercel deployment dashboard.
+- Ollama model discovery uses `/api/tags`. Vercel cannot reach the user's laptop
+  via localhost. Automatic model selection is an explained heuristic, not a
+  benchmark. Known model sizes are checked against a manually supplied runtime
+  RAM budget; unknown sizes must be verified by the user.
+
+Tests: `npm --prefix frontend run lint`, `npm --prefix frontend test`,
+`npm --prefix frontend run build`, backend pytest, optional disposable Postgres
+integration, plus `frontend/tests/admin-interactions.cjs`. The latter is
+**localhost-only and destructive to its disposable test database**; never run it
+against production. Model discovery is mocked in browser interaction tests;
+provider model selection and saving still use the real local backend.

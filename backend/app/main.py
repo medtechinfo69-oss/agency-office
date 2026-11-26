@@ -25,6 +25,7 @@ from . import sitebuilder
 
 app = FastAPI(title="AGENCY OFFICE", version="1.0.0")
 access = OwnerAccess.from_env()
+app.state.owner_access = access
 app.add_middleware(OwnerAccessMiddleware, access=access)
 app.include_router(auth_router(access))
 
@@ -37,6 +38,8 @@ app.add_middleware(
 # compress JSON/HTML/CSS/JS on the wire — faster first load
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
+from . import admin
+app.include_router(admin.router)
 app.include_router(api.router)
 from .cloud import router as cloud_router
 app.include_router(cloud_router)
@@ -83,6 +86,7 @@ async def ws_endpoint(ws: WebSocket) -> None:
 @app.on_event("startup")
 async def on_startup() -> None:
     try:
+        admin.initialize()
         if os.getenv('VERCEL') == '1': sitebuilder.init()
         await initialize_office()
     except Exception:

@@ -198,6 +198,25 @@ async def fetch_models(key: str, base_url: str, token: str) -> dict:
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(20.0),
                                  headers=headers, follow_redirects=True) as client:
+        if key == 'ollama':
+            if os.getenv('VERCEL') == '1' and any(host in base for host in ('localhost', '127.0.0.1', '[::1]')):
+                out['error'] = 'Local Ollama is not reachable from Vercel. Use a secured, remotely reachable runtime endpoint.'
+                return out
+            try:
+                endpoint = base[:-3] if base.endswith('/v1') else base
+                response = await client.get(endpoint + '/api/tags')
+                response.raise_for_status()
+                tags = response.json().get('models', [])
+                out['models'] = [{'id': item.get('name') or item.get('model'), 'free': True,
+                                  'size': item.get('size'), 'image': False} for item in tags if item.get('name') or item.get('model')]
+                out['valid'] = bool(out['models'])
+                out['free_count'] = len(out['models'])
+                if not out['valid']: out['error'] = 'No installed Ollama models. Install a model on your runtime, then retry.'
+                return out
+            except Exception:
+                out['error'] = 'Cannot discover Ollama models from /api/tags. Check the endpoint and runtime availability.'
+                return out
+
         # 1) key validation — openrouter's /models is public, so check /key
         if key == "openrouter":
             if not token:

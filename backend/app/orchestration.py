@@ -300,6 +300,8 @@ async def execute_task(run: RunControl, task: dict) -> None:
     tid = task["id"]
     assignee = task["assignee"]
     try:
+        if db.kv_get('agent_enabled_' + assignee, '1') == '0':
+            raise ProviderError('bad_request', 'This agent is stopped. Enable it in Runtimes & agents, then Resume the project.')
         # wait while paused / stopped
         while not run.pause.is_set():
             if run.stop.is_set():

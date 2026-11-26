@@ -1,104 +1,50 @@
-/* Left navigation sidebar — logo, nav (lavender active pill),
-   bottom: theme segmented (system/sun/moon), FR/EN, user card. */
-import { useState } from 'react'
-import {
-  Building2, MessagesSquare, GitBranch, FolderKanban, ShieldCheck,
-  ScrollText, Sparkles, HeartPulse, ShoppingBag, Settings, LogOut,
-  Sun, Moon, MonitorCog, PanelsTopLeft, Menu, X,
-} from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Building2, MessagesSquare, GitBranch, FolderKanban, ShieldCheck, ScrollText, Sparkles, HeartPulse, ShoppingBag, PanelsTopLeft, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
+import { ADMIN_PAGES } from '../pages/SettingsPage'
+import { Button } from './admin-ui'
 
 export const NAV = [
-  { id: 'office', label: 'Office', fr: 'Bureau', Icon: Building2, q: 'What is the Manager doing right now?' },
-  { id: 'builder', label: 'Site Builder', fr: 'Créateur de sites', Icon: PanelsTopLeft, q: 'What would you like to build?' },
-  { id: 'chat', label: 'Chat', fr: 'Discuter', Icon: MessagesSquare, q: 'What should the team build next?' },
-  { id: 'workflows', label: 'Workflows', fr: 'Flux', Icon: GitBranch, q: 'What runs on autopilot?' },
-  { id: 'projects', label: 'Projects', fr: 'Projets', Icon: FolderKanban, q: 'Where is every project standing?' },
-  { id: 'permissions', label: 'Permissions', fr: 'Droits', Icon: ShieldCheck, q: 'Who can do what?' },
-  { id: 'logs', label: 'Logs', fr: 'Journal', Icon: ScrollText, q: 'What happened while you were away?' },
-  { id: 'skills', label: 'Skills', fr: 'Compétences', Icon: Sparkles, q: 'What can the team do?' },
-  { id: 'health', label: 'System health', fr: 'Santé système', Icon: HeartPulse, q: 'Is everything healthy?' },
-  { id: 'shop', label: 'Shop', fr: 'Boutique', Icon: ShoppingBag, q: 'How should the crew look?' },
-  { id: 'settings', label: 'Settings', fr: 'Réglages', Icon: Settings, q: 'Tune the agency to your liking.' },
+  { id: 'office', label: 'Office', Icon: Building2 },
+  { id: 'builder', label: 'Site Builder', Icon: PanelsTopLeft },
+  { id: 'chat', label: 'Chat', Icon: MessagesSquare },
+  { id: 'workflows', label: 'Workflows', Icon: GitBranch },
+  { id: 'projects', label: 'Projects', Icon: FolderKanban },
+  { id: 'permissions', label: 'Agent planning', Icon: ShieldCheck },
+  { id: 'logs', label: 'Logs', Icon: ScrollText },
+  { id: 'skills', label: 'Skills', Icon: Sparkles },
+  { id: 'health', label: 'System health', Icon: HeartPulse },
+  { id: 'shop', label: 'Agent appearance', Icon: ShoppingBag },
+  ...ADMIN_PAGES.map((p) => ({ ...p, id: 'settings/' + p.id })),
 ]
 
-export default function Sidebar({
-  page, onNavigate, lang, onLang, theme, onTheme, t, onLogout,
-}) {
-  const [open, setOpen] = useState(false)
-  const navigate = (id) => { onNavigate(id); setOpen(false) }
-  return (
-    <aside className={`sidebar ${open ? 'menu-open' : ''}`}>
-      <div className="mobile-nav-head">
-        <span className="mobile-brand"><Building2 size={20} /> Agency Office</span>
-        <button className="btn" aria-expanded={open} aria-controls="agency-navigation" onClick={() => setOpen(!open)}>
-          {open ? <X size={18} /> : <Menu size={18} />} {open ? 'Close' : 'Menu'}
-        </button>
-      </div>
-      <div className="side-logo">
-        <span className="side-logo-mark" aria-hidden="true">
-          <Building2 size={17} />
-        </span>
-        <div>
-          <div className="side-logo-name">AGENCY OFFICE</div>
-          <div className="side-logo-tag">AI crew, one desk</div>
-        </div>
-      </div>
-
-      <nav id="agency-navigation" className="side-nav" aria-label="Main navigation" onKeyDown={(e) => { if (e.key === 'Escape') { setOpen(false); e.currentTarget.parentElement.querySelector('[aria-controls]').focus() } }}>
-        {NAV.map(({ id, label, fr, Icon }) => (
-          <button
-            key={id}
-            className={`side-item ${page === id ? 'active' : ''}`}
-            onClick={() => navigate(id)}
-            aria-current={page === id ? 'page' : undefined}
-          >
-            <Icon size={16} strokeWidth={1.9} />
-            <span>{lang === 'fr' ? fr : label}</span>
-          </button>
-        ))}
-      </nav>
-
-      <div className="side-foot">
-        {/* theme segmented: system / sun / moon */}
-        <div className="seg theme-seg" role="group" aria-label="Theme">
-          <button className={theme === 'auto' ? 'on' : ''} title="System"
-            onClick={() => onTheme('auto')} aria-pressed={theme === 'auto'}>
-            <MonitorCog size={14} />
-          </button>
-          <button className={theme === 'day' ? 'on' : ''} title="Day"
-            onClick={() => onTheme('day')} aria-pressed={theme === 'day'}>
-            <Sun size={14} />
-          </button>
-          <button className={theme === 'night' ? 'on' : ''} title="Night"
-            onClick={() => onTheme('night')} aria-pressed={theme === 'night'}>
-            <Moon size={14} />
-          </button>
-        </div>
-
-        {/* FR / EN */}
-        <select
-          className="lang-pick"
-          value={lang}
-          onChange={(e) => onLang(e.target.value)}
-          aria-label="language"
-        >
-          <option value="en">EN</option>
-          <option value="fr">FR</option>
-          <option value="ar">العربية</option>
-        </select>
-
-        {/* user card */}
-        <div className="user-card">
-          <span className="user-avatar" aria-hidden="true">BO</span>
-          <div className="user-meta">
-            <div className="user-name">Boss</div>
-            <div className="user-role">{t('agencyOwner') || 'Agency owner'}</div>
-          </div>
-          <button className="user-out" title="Log out" aria-label="Log out" onClick={onLogout}>
-            <LogOut size={15} />
-          </button>
-        </div>
-      </div>
-    </aside>
-  )
+export default function Sidebar({ page, onNavigate, mobileOpen, setMobileOpen, profile }) {
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('ao_sidebar_collapsed') === 'true')
+  const ref = useRef(null)
+  useEffect(() => {
+    const media = matchMedia('(max-width: 767px)')
+    const update = () => { if (ref.current) ref.current.inert = media.matches && !mobileOpen }
+    update(); media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [mobileOpen])
+  useEffect(() => {
+    if (!mobileOpen) return
+    const previous = document.activeElement
+    const sidebar = ref.current
+    sidebar.querySelector('button')?.focus()
+    const handler = (e) => {
+      if (e.key === 'Escape') { setMobileOpen(false); previous?.focus() }
+      if (e.key !== 'Tab') return
+      const list = [...sidebar.querySelectorAll('a,button')].filter((el) => el.offsetParent !== null)
+      if (e.shiftKey && document.activeElement === list[0]) { e.preventDefault(); list.at(-1)?.focus() }
+      else if (!e.shiftKey && document.activeElement === list.at(-1)) { e.preventDefault(); list[0]?.focus() }
+    }
+    const old = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', handler)
+    return () => { document.body.style.overflow = old; document.removeEventListener('keydown', handler); previous?.focus() }
+  }, [mobileOpen, setMobileOpen])
+  const navigate = (event, id) => { event.preventDefault(); onNavigate(id); setMobileOpen(false) }
+  const items = (entries) => entries.map(({ id, label, Icon }) => <a href={'#' + id} className={`a-nav-link ${page === id || page === 'settings' && id === 'settings/connections' ? 'active' : ''}`} aria-current={page === id ? 'page' : undefined} key={id} title={collapsed ? label : undefined} aria-label={label} onClick={(e) => navigate(e, id)}><Icon size={18} strokeWidth={1.75} /><span className="a-nav-label">{label}</span></a>)
+  return <>{mobileOpen && <button className="a-drawer-shade" aria-label="Close navigation overlay" onClick={() => setMobileOpen(false)} />}<aside ref={ref} id="agency-navigation" aria-label="Workspace navigation" className={`sidebar ${collapsed && !mobileOpen ? 'is-collapsed' : ''} ${mobileOpen ? 'drawer-open' : ''}`}><div className="a-brand"><span className="a-brand-mark"><LayersMark /></span><div className="a-brand-copy"><strong>Agency Office</strong><small>Workspace console</small></div><Button variant="ghost" className="a-mobile-toggle" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={18} /></Button></div><nav className="a-nav" aria-label="Main navigation"><div className="a-nav-group">Workspace</div>{items(NAV.slice(0, 5))}<div className="a-nav-group">Administration</div>{items(NAV.slice(10))}<div className="a-nav-group">Tools & resources</div>{items(NAV.slice(5, 10))}</nav><div className="a-side-foot"><Button className="a-sidebar-collapse" variant="ghost" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed} onClick={() => { localStorage.setItem('ao_sidebar_collapsed', String(!collapsed)); setCollapsed(!collapsed) }}>{collapsed ? <PanelLeftOpen size={18} /> : <><PanelLeftClose size={18} /><span>Collapse sidebar</span></>}</Button><a className="a-user-link" href="#settings/account" title="Your account" onClick={(e) => navigate(e, 'settings/account')}><span className="a-avatar">{(profile?.name || 'Workspace owner').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()}</span><div className="a-user-copy"><strong>{profile?.name || 'Your workspace'}</strong><small>{profile?.role || 'Account settings'}</small></div></a></div></aside></>
 }
+function LayersMark() { return <Building2 size={19} strokeWidth={1.75} /> }
