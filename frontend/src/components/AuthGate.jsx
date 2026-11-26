@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Building2, LockKeyhole, RefreshCw } from 'lucide-react'
 import App from '../App'
+
+const SupabaseStatus = lazy(() => import('./SupabaseStatus'))
 
 export default function AuthGate() {
   const [session, setSession] = useState(null)
@@ -56,6 +58,7 @@ export default function AuthGate() {
       <h1 id="auth-title">{session ? 'Welcome back' : error ? 'Backend not connected' : 'Opening your agency…'}</h1>
       <p className="muted">{session ? 'Sign in to your private workspace to manage projects, agents, and AI providers.' : 'Your workspace needs a connection to its persistent backend.'}</p>
       {error && <div className="feedback-banner error" role="alert">{error}</div>}
+      {!session && error && <Suspense fallback={null}><SupabaseStatus key={retry} /></Suspense>}
       {session ? <form onSubmit={login} className="auth-form" aria-busy={busy}>
         <label className="field" htmlFor="owner-password">Workspace password
           <input id="owner-password" type="password" autoComplete="current-password" required autoFocus value={password} onChange={(event) => setPassword(event.target.value)} />

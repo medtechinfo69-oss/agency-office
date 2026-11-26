@@ -2,6 +2,8 @@
 
 ## Current status
 
+**Supabase migration started:** the selected free-project connection, protected initial tables and private storage are prepared. See [SUPABASE_MIGRATION.md](SUPABASE_MIGRATION.md) for what is implemented and the remaining API/auth/jobs migration. The Python API has **not** been replaced.
+
 - Vercel project **agency-office** has been created in **medtechinfo69-oss' projects** and linked to `medtechinfo69-oss/agency-office`.
 - Saved Vercel settings: Vite, root `frontend`, install `npm ci`, build `npm run build`, output `dist`.
 - Frontend production alias: https://agency-office-indol.vercel.app/.
