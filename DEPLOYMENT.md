@@ -4,8 +4,10 @@
 
 - Vercel project **agency-office** has been created in **medtechinfo69-oss' projects** and linked to `medtechinfo69-oss/agency-office`.
 - Saved Vercel settings: Vite, root `frontend`, install `npm ci`, build `npm run build`, output `dist`.
-- Backend hosting is **not provisioned**. No paid service or disk has been purchased.
-- The frontend is **not yet deployed**. A persistent backend URL is needed before generating its production HTTP/media rewrites and WebSocket setting. Publishing a frontend with no backend would not provide the full application.
+- Frontend production alias: https://agency-office-indol.vercel.app/.
+- The owner supplied Railway backend origin: `https://agency-office-production-c80c7cdd.up.railway.app`. Its availability, credentials and persistent volume have not yet been verified.
+- `frontend/vercel.json` now routes API/media to that Railway origin; Vercel's production/preview `VITE_WS_URL` is configured for its direct `/ws` endpoint. A new deployment is required to apply changes.
+- No paid service or disk has been purchased by the agent. The optional Render blueprint below is **paid** and is not the selected deployment route.
 - All work in this session uses branch `arena/38052b10-agency-office`. Do not deploy the old `main` commit expecting the redesign or hosting changes.
 
 Vercel project settings: https://vercel.com/medtechinfo69-oss-projects/agency-office
@@ -16,7 +18,29 @@ The frontend is a static React/Vite app. The Python service owns two SQLite data
 
 HTTP and media requests use the **frontend's own origin** and Vercel external rewrites. Authentication cookies are therefore same-origin, not third-party cookies. WebSockets connect **directly to the backend over WSS**, using a short-lived, WS-only signed ticket obtained through an authenticated same-origin request. They do not rely on Vercel accepting a WebSocket upgrade.
 
-## Step 1 — provision the backend (owner action)
+## Selected backend: Railway (owner dashboard setup)
+
+Use the existing Railway service at the origin above. Deploy branch `arena/38052b10-agency-office` with repository root as the build directory and the root `Dockerfile`; leave the start command unset so the image entrypoint runs. Do not deploy only the `frontend` directory to Railway.
+
+In Railway → service → Variables, set:
+
+```text
+APP_ENV=production
+ALLOWED_ORIGINS=https://agency-office-indol.vercel.app,https://agency-office-medtechinfo69-oss-projects.vercel.app
+DATA_DIR=/data
+DB_PATH=/data/agency.db
+DEMO_MODE=false
+```
+
+Also create private `ACCESS_PASSWORD` (unique random 16+ characters) and `SESSION_SECRET` (independent random 32+ characters) values directly in Railway. Never put them in Git, chat or Vercel `VITE_` variables. Missing/short secrets intentionally prevent production startup. Add provider credentials only in Railway or authenticated application settings.
+
+Attach the plan's persistent volume at `/data` before storing real projects. Without a volume, SQLite databases and uploads are ephemeral even when deployment succeeds. Configure public networking to target the running app's `PORT` (the image defaults to `10000`); a mismatched target port can produce an unavailable service despite a successful build. Set the healthcheck path to `/healthz` and keep one replica.
+
+Apply/redeploy after setting variables. Open the Railway origin plus `/healthz` and `/api/auth/session`. The health endpoint should return HTTP 200; the session endpoint should return JSON with authentication required, not an HTML frontend or Railway error page. Do not disable production access checks to resolve a startup failure.
+
+Railway's Free plan has a small monthly usage allowance and sleeps when idle. Usage exhaustion can stop the service, and scheduled/background jobs cannot run while it is asleep or stopped. A live browser WebSocket can consume additional runtime. Confirm Free-plan eligibility and limits in the Railway dashboard; do not approve a paid upgrade. These limits mean this is a light-use deployment, not guaranteed always-on hosting.
+
+## Alternative only — provision Render (paid, not selected)
 
 The supplied `render.yaml` is an optional Render Blueprint. It requests a **paid Starter web service and a 1 GB persistent disk**. Review the current prices shown in Render before approving it. Nothing is provisioned merely by committing this file.
 
