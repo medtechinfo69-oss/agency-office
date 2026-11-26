@@ -143,3 +143,23 @@ def test_refresh_does_not_replay_approved_gate_or_old_task_snapshot(office):
     assert not any(e['type'] in ('approval_required', 'task') for e in initial['events'])
     db.execute("UPDATE cloud_runs SET phase='awaiting_plan',plan=? WHERE project_id='p'", (db.jdump(plan()),))
     assert any(e['type'] == 'approval_required' for e in cloud.events(after=0)['events'])
+
+
+@pytest.mark.asyncio
+async def test_boss_guidance_retries_failed_planning_not_empty_delivery(office, monkeypatch):
+    cloud.enqueue('p', 'Brief')
+    monkeypatch.setattr(cloud.orch, 'manager_plan', AsyncMock(side_effect=ValueError('failure')))
+    await cloud.advance(cloud.Advance(project_id='p'))
+    cloud.enqueue('p', 'Try with this clarified brief')
+    assert db.one('SELECT phase FROM cloud_runs')['phase'] == 'planning'
+    assert 'clarified' in db.one('SELECT brief FROM cloud_runs')['brief']
+
+
+@pytest.mark.asyncio
+async def test_empty_provider_plan_does_not_deliver_empty_package(office, monkeypatch):
+    cloud.enqueue('p', 'Brief')
+    monkeypatch.setattr(cloud.orch, 'manager_plan', AsyncMock(return_value={'summary': 'No work'}))
+    result = await cloud.advance(cloud.Advance(project_id='p'))
+    assert not result['advanced']
+    assert db.one('SELECT phase FROM cloud_runs')['phase'] == 'blocked'
+    assert db.query('SELECT * FROM deliverables') == []

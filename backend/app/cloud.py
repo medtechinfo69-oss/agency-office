@@ -29,7 +29,8 @@ def enqueue(pid, text):
     if job and job['lease_until'] > time.time():
         db.add_memory('project', pid, text, 'preference')
         return
-    if job and job['phase'] in ('tasks', 'blocked', 'paused'):
+    if job and (job['phase'] == 'tasks' or
+                (job['phase'] in ('blocked', 'paused') and job['resume_phase'] == 'tasks')):
         db.execute("UPDATE tasks SET status='todo', description=description || ?, updated_at=? WHERE project_id=? AND status IN ('blocked','progress','rejected')",
                    ('\nBoss guidance: ' + text, db.now(), pid))
         db.execute("UPDATE cloud_runs SET phase='tasks', error='', lease_until=0 WHERE project_id=?", (pid,))
@@ -109,6 +110,8 @@ async def _step(job):
     run = orch.RunControl(project_id=pid)
     if job['phase'] == 'planning':
         plan = await orch.manager_plan(run, job['brief'])
+        if not isinstance(plan.get('tasks'), list) or not plan['tasks']:
+            raise RuntimeError('The provider returned no actionable tasks. Review the brief and Resume or send guidance to retry planning.')
         if db.one('SELECT phase FROM cloud_runs WHERE project_id=?', (pid,))['phase'] != 'planning': return
         db.execute("UPDATE cloud_runs SET plan=?,phase='awaiting_plan',resume_phase='planning' WHERE project_id=?", (db.jdump(plan), pid))
         if db.kv_get('auto_approve', '0') == '1': _tasks(pid, plan)
