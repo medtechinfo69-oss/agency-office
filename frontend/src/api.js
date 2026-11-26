@@ -12,7 +12,7 @@ async function req(method, path, body) {
   try {
     res = await authFetch(BASE + path, opts)
   } catch (e) {
-    throw new Error('Cannot reach the backend — is it running on port 8000?')
+    throw new Error('Cannot reach the agency backend. Check the connection and backend deployment, then retry.')
   }
   if (!res.ok) {
     let detail = res.statusText

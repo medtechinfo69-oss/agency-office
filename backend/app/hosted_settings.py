@@ -19,3 +19,4 @@ def refresh():
     settings.api_base_url = active.get('base_url') or settings.api_base_url
     settings.text_model = active.get('model') or settings.text_model
     if saved.get('image_model'): settings.image_model = saved['image_model']
+    if saved.get('demo_mode') in ('true', 'false', 'auto'): settings.demo_mode = saved['demo_mode']

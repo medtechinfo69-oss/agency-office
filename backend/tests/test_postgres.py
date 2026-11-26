@@ -54,3 +54,23 @@ def test_local_postgres_persistence_and_sitebuilder(monkeypatch):
     db.execute('DELETE FROM projects WHERE id=?', (pid,))
     db.execute('DELETE FROM media_files WHERE path=?', (pid,))
     db._conn.close()
+
+
+def test_supabase_pooler_uses_bundled_ca_and_preserves_hostname_verification(monkeypatch):
+    import hashlib
+    import ssl
+    from pathlib import Path
+    from unittest.mock import Mock
+    import psycopg
+    connect = Mock()
+    monkeypatch.setattr(psycopg, 'connect', connect)
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://test:fake@aws-1-eu-west-1.pooler.supabase.com:6543/postgres?sslmode=verify-full&sslrootcert=system')
+    Connection('agency_office')
+    options = connect.call_args.kwargs
+    assert options['sslmode'] == 'verify-full'
+    assert options['prepare_threshold'] is None
+    pem = Path(options['sslrootcert']).read_text()
+    assert hashlib.sha256(ssl.PEM_cert_to_DER_cert(pem)).hexdigest() == '807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa'
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://test:fake@other.example/postgres?sslmode=verify-full&sslrootcert=system')
+    Connection('agency_office')
+    assert connect.call_args.kwargs['sslrootcert'] == 'system'

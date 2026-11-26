@@ -29,7 +29,7 @@ export default function SupabaseStatus() {
   if (!status) return null
   return <div className="feedback-banner" role="status">
     {status.ready
-      ? 'Supabase connection verified. The workspace API migration is still pending; Supabase is not yet replacing the Python backend.'
+      ? 'The public Supabase connection is available, but the private Python API is not responding. Check the backend deployment and its database configuration.'
       : status.message}
   </div>
 }

@@ -203,3 +203,9 @@ checkpoint approvals/dependencies/leases/retry/control, and adapter SQL handling
 For disposable local Postgres only, set `TEST_POSTGRES_URL` and run
 `tests/test_postgres.py` to verify schema initialization, persistence, binary data,
 Unicode/bound parameters, and Site Builder. Never point that test at production.
+
+Supabase pooler TLS uses the bundled **public** root certificate under
+`backend/certs/`, automatically selected only for `*.pooler.supabase.com` URLs
+with `sslrootcert=system` (or no explicit CA path). Chain and hostname verification
+remain enabled. Site Builder prompt assets now live in `backend/prompts/` so
+Vercel can package them without parent-directory paths.

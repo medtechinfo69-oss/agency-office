@@ -704,6 +704,8 @@ def activate_session_fallback() -> None:
 
 
 def get_provider() -> BaseProvider:
+    from .hosted_settings import refresh
+    refresh()
     if session_fallback:
         return DemoProvider()
     if settings.is_demo:

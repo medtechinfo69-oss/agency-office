@@ -133,3 +133,13 @@ def test_events_are_persisted_ordered_and_cursor_based(office):
     cloud.bus.publish_sync('test', {'value': 2}, 'p')
     second = cloud.events(after=first['cursor'])
     assert [e['data']['value'] for e in second['events']] == [2]
+
+
+def test_refresh_does_not_replay_approved_gate_or_old_task_snapshot(office):
+    cloud.enqueue('p', 'Brief')
+    cloud.bus.publish_sync('approval_required', {'kind': 'plan', 'plan': plan()}, 'p')
+    cloud.bus.publish_sync('task', {'id': 'old', 'status': 'progress'}, 'p')
+    initial = cloud.events(after=0)
+    assert not any(e['type'] in ('approval_required', 'task') for e in initial['events'])
+    db.execute("UPDATE cloud_runs SET phase='awaiting_plan',plan=? WHERE project_id='p'", (db.jdump(plan()),))
+    assert any(e['type'] == 'approval_required' for e in cloud.events(after=0)['events'])

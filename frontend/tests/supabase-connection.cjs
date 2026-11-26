@@ -23,7 +23,7 @@ async function main() {
         : route.fulfill({ status: 401, json: { message: 'Invalid API key' } })
     })
     await page.goto(process.env.UI_URL || 'http://localhost:5174')
-    await page.getByText('Supabase connection verified.', { exact: false }).waitFor()
+    await page.getByText('The public Supabase connection is available,', { exact: false }).waitFor()
     assert.equal(await page.locator('.workspace').count(), 0, 'Readiness must not bypass authentication/API gate')
     assert.equal(privateReads, 0)
     assert.ok(rpcCalls > 0)

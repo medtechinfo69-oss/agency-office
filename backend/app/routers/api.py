@@ -44,6 +44,8 @@ def _task_dict(r) -> dict:
 @router.get("/health")
 def health() -> dict:
     from .. import provider as provider_mod
+    from ..hosted_settings import refresh
+    refresh()
     demo = settings.is_demo or provider_mod.session_fallback
     reason = ""
     if provider_mod.session_fallback:
@@ -218,6 +220,8 @@ class SettingsIn(BaseModel):
 
 @router.get("/settings")
 def get_settings() -> dict:
+    from ..hosted_settings import refresh
+    refresh()
     return {
         # secrets are NEVER returned — only whether they exist
         "api_base_url": settings.api_base_url,
