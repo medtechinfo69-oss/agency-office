@@ -1,3 +1,4 @@
+import { authFetch } from './auth'
 /* Minimal API client — all requests go through the Vite proxy (/api). */
 const BASE = '/api'
 
@@ -9,7 +10,7 @@ async function req(method, path, body) {
   }
   let res
   try {
-    res = await fetch(BASE + path, opts)
+    res = await authFetch(BASE + path, opts)
   } catch (e) {
     throw new Error('Cannot reach the backend — is it running on port 8000?')
   }
@@ -94,7 +95,7 @@ export const api = {
   async uploadLogo(pid, file) {
     const fd = new FormData()
     fd.append('file', file)
-    const res = await fetch(`${BASE}/projects/${pid}/brand/logo`, { method: 'POST', body: fd })
+    const res = await authFetch(`${BASE}/projects/${pid}/brand/logo`, { method: 'POST', body: fd })
     if (!res.ok) throw new Error('logo upload failed')
     return res.json()
   },

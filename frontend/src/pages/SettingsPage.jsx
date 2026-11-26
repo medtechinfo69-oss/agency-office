@@ -19,7 +19,7 @@ const TABS = [
 ]
 
 export default function SettingsPage({
-  t, lang, setLang, agents, health, onRefresh, onNavigate,
+  t, lang, setLang, agents, health, connected, onRefresh, onNavigate,
   theme, setTheme, dayNight, setDayNight,
   settings, onSaveSettings, projectId,
 }) {
@@ -58,8 +58,8 @@ export default function SettingsPage({
               <div className="diag-row"><StatusPill status={health?.ok ? 'ok' : 'error'} label={health?.ok ? 'Reachable' : 'Down'} />
                 <span className="mono">GET /api/health</span>
                 <span className="mono">{latency !== null ? `${latency} ms` : '—'}</span></div>
-              <div className="diag-row"><StatusPill status="ok" label="WebSocket" /><span className="mono">/ws · event stream</span></div>
-              <div className="diag-row"><StatusPill status="ok" label="Ollama" /><span className="mono">localhost:11434</span></div>
+              <div className="diag-row"><StatusPill status={connected ? 'ok' : 'warning'} label={connected ? 'WebSocket connected' : 'WebSocket reconnecting'} /><span className="mono">/ws · event stream</span></div>
+              <div className="diag-row"><StatusPill status="idle" label="Ollama · not checked" /><span className="mono">localhost:11434</span></div>
             </Card>
             <Card className="diag-card">
               <span className="eyebrow">Crew</span>
@@ -77,7 +77,7 @@ export default function SettingsPage({
             <Card>
               <span className="eyebrow">LLM runtimes</span>
               <div className="rt-row"><strong>Ollama</strong><span className="mono">11434</span>
-                <StatusPill status="ok" label="Local · free" /></div>
+                <StatusPill status="idle" label="Local · connectivity not checked" /></div>
               <div className="rt-row"><strong>OpenRouter</strong><span className="mono">openrouter.ai</span>
                 <StatusPill status="idle" label="Cloud fallback" /></div>
               <div className="rt-row"><strong>Custom</strong><span className="mono">any OpenAI-compatible</span>
@@ -124,7 +124,7 @@ export default function SettingsPage({
             <Segmented ariaLabel="office theme"
               options={[{ id: 'auto', label: 'Auto' }, { id: 'day', label: 'Day' }, { id: 'night', label: 'Night' }]}
               value={dayNight} onChange={setDayNight} />
-            <p className="muted">Saved to your profile and reflected in the isometric office.</p>
+            <p className="muted">Interface theme is saved in this browser. Office lighting is saved on the server.</p>
           </Card>
         )}
 
@@ -140,6 +140,7 @@ export default function SettingsPage({
 
         {tab === 'users' && (
           <div className="users-wrap">
+            <p className="feedback-banner" style={{ gridColumn: '1 / -1' }}>Illustrative users only. Role changes below are a preview, are not saved, and do not enforce access.</p>
             <Card className="users-list">
               <span className="eyebrow">Users</span>
               {users.map((u, i) => (
@@ -171,9 +172,9 @@ export default function SettingsPage({
                 </div>
               </div>
               <div className="save-bar">
-                <span className={`save-flash ${role === users[user].role ? '' : ''}`}>unsaved changes apply instantly</span>
+                <span className={`save-flash ${role === users[user].role ? '' : ''}`}>Preview only · not persisted</span>
                 <span className="spacer" />
-                <button className="btn primary">Save</button>
+                <button className="btn primary" disabled title="User management is not implemented">Save unavailable</button>
               </div>
             </Card>
           </div>
@@ -181,6 +182,7 @@ export default function SettingsPage({
 
         {tab === 'roles' && (
           <div className="roles-grid">
+            <p className="feedback-banner" style={{ gridColumn: '1 / -1' }}>Illustrative roles — these permissions are not enforced.</p>
             {[
               { name: 'Admin', n: 1, desc: 'Full control: keys, users, delete.' },
               { name: 'Editor', n: 1, desc: 'Run projects, approve plans, chat.' },

@@ -8,9 +8,9 @@ import { Empty, StatusPill } from '../components/ui'
 const COLS = [
   { id: 'idea', label: 'Idea', match: (s) => s === 'idea' },
   { id: 'todo', label: 'To do', match: (s) => ['todo', 'pending'].includes(s) },
-  { id: 'doing', label: 'In progress', match: (s) => ['doing', 'running', 'progress'].includes(s) },
+  { id: 'doing', label: 'In progress', match: (s) => ['doing', 'running', 'progress', 'blocked'].includes(s) },
   { id: 'review', label: 'In review', match: (s) => ['review', 'rejected'].includes(s) },
-  { id: 'done', label: 'Done', match: (s) => ['done', 'blocked'].includes(s) },
+  { id: 'done', label: 'Done', match: (s) => s === 'done' },
 ]
 
 const PRIO = { blocked: 'P0', rejected: 'P1', review: 'P2', doing: 'P3', running: 'P3', todo: 'P4', idea: 'P6', done: 'P7' }
@@ -49,14 +49,14 @@ export default function ProjectsPage({
       {/* toolbar */}
       <div className="proj-toolbar">
         <div className="project-pick">
-          <select value={projectId || ''} onChange={(e) => setProjectId(e.target.value)}>
+          <select aria-label="Project for task board" value={projectId || ''} onChange={(e) => setProjectId(e.target.value)}>
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
         <label className="search-box">
           <Search size={14} />
           <input value={q} onChange={(e) => setQ(e.target.value)}
-            placeholder={`${t('search')}…`} />
+            aria-label="Search tasks" placeholder={`${t('search')}…`} />
         </label>
         <div className="seg">
           {[['all', 'All'], ['risk', `At risk${riskCount ? ` (${riskCount})` : ''}`], ['manager', 'With Manager']].map(([id, label]) => (
@@ -91,14 +91,14 @@ export default function ProjectsPage({
               </header>
               <div className="kanban-body">
                 {items.length === 0 && (
-                  <div className="kanban-empty">{col.id === 'idea' ? 'No ideas yet' : '—'}</div>
+                  <div className="kanban-empty">{q || filter !== 'all' || prio !== 'all' ? 'No matching tasks' : 'No tasks yet'}</div>
                 )}
                 {items.map((task) => {
                   const ag = agentOf(task.assignee)
                   const risky = ['blocked', 'rejected'].includes(task.status)
                   const initial = (task.title || '?').trim()[0].toUpperCase()
                   return (
-                    <article key={task.id} className="kanban-card"
+                    <article key={task.id} role={ag ? "button" : undefined} tabIndex={ag ? 0 : undefined} aria-label={`View ${task.assignee}: ${task.title}`} onKeyDown={(e) => { if (ag && ['Enter', ' '].includes(e.key)) { e.preventDefault(); onPickAgent(ag.id) } }} className="kanban-card"
                       onClick={() => ag && onPickAgent(ag.id)}>
                       <div className="kc-cover" style={{ background: ag?.color || '#4f46e5' }}>
                         <span className="kc-mono">{initial}</span>
@@ -108,7 +108,7 @@ export default function ProjectsPage({
                         <h4 className="kc-title">{task.title}</h4>
                         <div className="kc-tags">
                           <span className="tag mono">{task.assignee}</span>
-                          {task.depends && task.depends !== '[]' && task.depends !== '[]' &&
+                          {task.depends && task.depends !== '[]' &&
                             <span className="tag">deps</span>}
                           {risky && (
                             <span className="pill pill-red">

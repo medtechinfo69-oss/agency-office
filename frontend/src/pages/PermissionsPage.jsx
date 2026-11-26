@@ -29,13 +29,15 @@ function loadMatrix(agents) {
 export default function PermissionsPage({ t, agents }) {
   const [matrix, setMatrix] = useState(() => loadMatrix(agents))
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
 
   const setCell = (agentId, action, level) => {
     setMatrix((m) => ({ ...m, [agentId]: { ...(m[agentId] || {}), [action]: level } }))
     setSaved(false)
   }
   const save = () => {
-    localStorage.setItem('ao_perms', JSON.stringify(matrix))
+    try { localStorage.setItem('ao_perms', JSON.stringify(matrix)); setError('') }
+    catch { setError('Browser storage is unavailable. Your changes have not been saved.'); return }
     setSaved(true)
     setTimeout(() => setSaved(false), 1800)
   }
@@ -48,8 +50,9 @@ export default function PermissionsPage({ t, agents }) {
         <ShieldCheck size={15} />
         Planning only: this matrix is stored in your browser and is not enforced by the server. It does not restrict agent actions.
       </div>
+      {error && <div className="feedback-banner error" role="alert">{error}</div>}
       <Card className="perms-card">
-        <table className="perms-table">
+        <table className="perms-table"><caption className="sr-only">Browser-local agent permissions planning matrix</caption>
           <thead>
             <tr>
               <th>Agent</th>
@@ -70,10 +73,10 @@ export default function PermissionsPage({ t, agents }) {
                 </td>
                 {ACTIONS.map((act) => (
                   <td key={act}>
-                    <div className="seg seg-sm" role="radiogroup" aria-label={`${a.id} ${act}`}>
+                    <div className="seg seg-sm" role="group" aria-label={`${a.id} ${act}`}>
                       {LEVELS.map((lv) => (
                         <button key={lv}
-                          className={(matrix[a.id]?.[act] || 'None') === lv ? 'on' : ''}
+                          aria-pressed={(matrix[a.id]?.[act] || 'None') === lv} className={(matrix[a.id]?.[act] || 'None') === lv ? 'on' : ''}
                           onClick={() => setCell(a.id, act, lv)}>
                           {lv}
                         </button>
@@ -87,7 +90,7 @@ export default function PermissionsPage({ t, agents }) {
         </table>
       </Card>
       <div className="save-bar">
-        <span className={`save-flash ${saved ? 'on' : ''}`}>✔ Saved</span>
+        <span role="status" className={`save-flash ${saved ? 'on' : ''}`}>✔ Saved</span>
         <span className="spacer" />
         <button className="btn primary" onClick={save}>Save permissions</button>
       </div>

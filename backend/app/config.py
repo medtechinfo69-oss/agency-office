@@ -144,14 +144,20 @@ class Settings:
         return p
 
     @property
+    def data_dir(self) -> Path:
+        directory = Path(_env("DATA_DIR", str(Path(__file__).resolve().parents[1] / "data")))
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+
+    @property
     def media_dir(self) -> Path:
-        d = Path(__file__).resolve().parents[1] / "data" / "media"
+        d = self.data_dir / "media"
         d.mkdir(parents=True, exist_ok=True)
         return d
 
     @property
     def export_dir(self) -> Path:
-        d = Path(__file__).resolve().parents[1] / "data" / "exports"
+        d = self.data_dir / "exports"
         d.mkdir(parents=True, exist_ok=True)
         return d
 

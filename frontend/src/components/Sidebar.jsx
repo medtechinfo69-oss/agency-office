@@ -1,9 +1,10 @@
 /* Left navigation sidebar — logo, nav (lavender active pill),
    bottom: theme segmented (system/sun/moon), FR/EN, user card. */
+import { useState } from 'react'
 import {
   Building2, MessagesSquare, GitBranch, FolderKanban, ShieldCheck,
   ScrollText, Sparkles, HeartPulse, ShoppingBag, Settings, LogOut,
-  Sun, Moon, MonitorCog, PanelsTopLeft,
+  Sun, Moon, MonitorCog, PanelsTopLeft, Menu, X,
 } from 'lucide-react'
 
 export const NAV = [
@@ -23,8 +24,16 @@ export const NAV = [
 export default function Sidebar({
   page, onNavigate, lang, onLang, theme, onTheme, t, onLogout,
 }) {
+  const [open, setOpen] = useState(false)
+  const navigate = (id) => { onNavigate(id); setOpen(false) }
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${open ? 'menu-open' : ''}`}>
+      <div className="mobile-nav-head">
+        <span className="mobile-brand"><Building2 size={20} /> Agency Office</span>
+        <button className="btn" aria-expanded={open} aria-controls="agency-navigation" onClick={() => setOpen(!open)}>
+          {open ? <X size={18} /> : <Menu size={18} />} {open ? 'Close' : 'Menu'}
+        </button>
+      </div>
       <div className="side-logo">
         <span className="side-logo-mark" aria-hidden="true">
           <Building2 size={17} />
@@ -35,12 +44,12 @@ export default function Sidebar({
         </div>
       </div>
 
-      <nav className="side-nav" aria-label="main">
+      <nav id="agency-navigation" className="side-nav" aria-label="Main navigation" onKeyDown={(e) => { if (e.key === 'Escape') { setOpen(false); e.currentTarget.parentElement.querySelector('[aria-controls]').focus() } }}>
         {NAV.map(({ id, label, fr, Icon }) => (
           <button
             key={id}
             className={`side-item ${page === id ? 'active' : ''}`}
-            onClick={() => onNavigate(id)}
+            onClick={() => navigate(id)}
             aria-current={page === id ? 'page' : undefined}
           >
             <Icon size={16} strokeWidth={1.9} />
@@ -51,7 +60,7 @@ export default function Sidebar({
 
       <div className="side-foot">
         {/* theme segmented: system / sun / moon */}
-        <div className="seg theme-seg" role="radiogroup" aria-label="theme">
+        <div className="seg theme-seg" role="group" aria-label="Theme">
           <button className={theme === 'auto' ? 'on' : ''} title="System"
             onClick={() => onTheme('auto')} aria-pressed={theme === 'auto'}>
             <MonitorCog size={14} />
@@ -75,6 +84,7 @@ export default function Sidebar({
         >
           <option value="en">EN</option>
           <option value="fr">FR</option>
+          <option value="ar">العربية</option>
         </select>
 
         {/* user card */}
@@ -84,7 +94,7 @@ export default function Sidebar({
             <div className="user-name">Boss</div>
             <div className="user-role">{t('agencyOwner') || 'Agency owner'}</div>
           </div>
-          <button className="user-out" title="Log out" onClick={onLogout}>
+          <button className="user-out" title="Log out" aria-label="Log out" onClick={onLogout}>
             <LogOut size={15} />
           </button>
         </div>

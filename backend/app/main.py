@@ -18,14 +18,18 @@ from . import agents as agentreg
 from . import db, scheduler
 from .config import settings
 from .events import bus
+from .access import OwnerAccess, OwnerAccessMiddleware, auth_router
 from .routers import api
 from . import sitebuilder
 
 app = FastAPI(title="AGENCY OFFICE", version="1.0.0")
+access = OwnerAccess.from_env()
+app.add_middleware(OwnerAccessMiddleware, access=access)
+app.include_router(auth_router(access))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # local-first app; frontend is served by Vite/dev server
+    allow_origins=list(access.origins) if access.production else ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

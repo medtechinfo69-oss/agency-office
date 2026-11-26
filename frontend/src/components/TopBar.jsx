@@ -15,9 +15,9 @@ export default function TopBar({ title, question, live, clock, provider, demo, r
             {demo ? '🧪 DEMO' : provider}
           </span>
         )}
-        <span className="live-badge" title={live ? 'Connected' : 'Reconnecting…'}>
+        <span className={`live-badge ${live ? 'connected' : 'reconnecting'}`} role="status" title={live ? 'Connected' : 'Reconnecting…'}>
           <span className={`live-dot ${live ? 'on' : ''}`} />
-          Live
+          {live ? 'Live' : 'Reconnecting…'}
         </span>
         <span className="clock mono">{clock}</span>
       </div>

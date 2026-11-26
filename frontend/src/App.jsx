@@ -44,7 +44,7 @@ const audio = {
 
 let toastSeq = 0
 
-export default function App() {
+export default function App({ onLogout } = {}) {
   /* ---------------- state ---------------- */
   const [lang, setLang] = useState('en')
   const [settings, setSettings] = useState(null)
@@ -69,6 +69,8 @@ export default function App() {
   const [showDemoBanner, setShowDemoBanner] = useState(true)
   const [toasts, setToasts] = useState([])
   const [clock, setClock] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [sound, setSound] = useState(() => localStorage.getItem('ao_sound') || 'on')
   const officeApi = useRef(null)
 
@@ -266,16 +268,18 @@ export default function App() {
           await Promise.all([loadProject(id), loadMessages(id), loadLog(id)])
         }
       } catch (e) {
+        setLoadError('Unable to load the office. Check that the backend is running, then retry.')
         setLog([{ level: 'error', text: 'Backend unreachable: ' + e.message }])
+      } finally {
+        setLoading(false)
       }
     })()
   }, []) // eslint-disable-line
 
   useEffect(() => {
     if (!projectId) return
-    loadProject(projectId)
-    loadMessages(projectId)
-    loadLog(projectId)
+    Promise.all([loadProject(projectId), loadMessages(projectId), loadLog(projectId)])
+      .catch((e) => pushToast('Could not load project: ' + e.message, 'error'))
     setApproval(null)
     setEscalation(null)
     setPicked(null)
@@ -400,7 +404,7 @@ export default function App() {
   const night = (settings?.day_night || 'day') === 'night'
   const speed = Number(settings?.speed || 1)
 
-  const setDayNight = (v) => api.saveSettings({ day_night: v }).then(setSettings).catch(() => {})
+  const setDayNight = (v) => api.saveSettings({ day_night: v }).then(setSettings).catch((e) => pushToast(e.message, 'error'))
 
   const onPickAgent = (id) => {
     if (id === '__shop__') { setPage('shop'); return }
@@ -417,37 +421,40 @@ export default function App() {
   /* ---------------- render ---------------- */
   return (
     <div className={`app ${night ? 'night' : 'day'}`} dir={dir(lang)}>
-      {health?.demo && showDemoBanner && (
-        <div className="demo-banner">
-          {health.demo_reason === 'billing'
-            ? '💳 APInex billing issue (402) — running DEMO fallback so you can explore. Top up at apinex.bond/billing, then restart to resume real AI.'
-            : '🧪 ' + t('demoNote')}
-          <button onClick={() => setShowDemoBanner(false)}>✕</button>
-        </div>
-      )}
-
+      <a className="skip-link" href="#main-content">Skip to content</a>
       <Sidebar
         page={page} onNavigate={(p) => { if (p === 'builder') setBuilderVisited(true); setPage(p); setPicked(null) }}
         lang={lang}
-        onLang={(v) => { setLang(v); api.saveSettings({ language: v }).then(setSettings) }}
+        onLang={(v) => { setLang(v); api.saveSettings({ language: v }).then(setSettings).catch((e) => pushToast(e.message, 'error')) }}
         theme={theme} onTheme={setTheme}
         t={t}
-        onLogout={() => pushToast('Logout is disabled in this demo', 'warn')}
+        onLogout={onLogout || (() => pushToast('Local mode has no sign-in session', 'info'))}
       />
 
-      <main className={`workspace ${page === 'builder' ? 'builder-workspace' : ''}`}>
+      <main id="main-content" tabIndex={-1} className={`workspace ${page === 'builder' ? 'builder-workspace' : ''}`}>
+        {health?.demo && showDemoBanner && (
+          <div className="demo-banner">
+            {health.demo_reason === 'billing'
+              ? '💳 APInex billing issue (402) — running DEMO fallback so you can explore. Top up at apinex.bond/billing, then restart to resume real AI.'
+              : '🧪 ' + t('demoNote')}
+            <button aria-label="Dismiss demo notice" onClick={() => setShowDemoBanner(false)}>✕</button>
+          </div>
+        )}
         {page !== 'builder' && <TopBar
           title={title} question={question}
           live={connected} clock={clock}
           provider={health?.provider_label} demo={health?.demo}
-          right={page === 'projects' || page === 'office' ? (
+          right={page === 'office' ? (
             <div className="project-pick">
-              <select value={projectId || ''} onChange={(e) => setProjectId(e.target.value)}>
+              <select aria-label="Current project" value={projectId || ''} onChange={(e) => setProjectId(e.target.value)}>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
           ) : null}
         />}
+
+        {loading && page !== 'builder' && <div className="feedback-banner" role="status"><span className="loading-dot" /> Loading your workspace…</div>}
+        {loadError && page !== 'builder' && <div className="feedback-banner error" role="alert"><span>{loadError}</span><button className="btn sm" onClick={() => window.location.reload()}>Retry</button></div>}
 
         {builderVisited && <div style={{display: page === 'builder' ? 'contents' : 'none'}}><SiteBuilderPage officeTheme={theme} /></div>}
 
@@ -494,7 +501,7 @@ export default function App() {
         {page === 'settings' && (
           <SettingsPage
             t={t} lang={lang} setLang={setLang}
-            agents={agents} health={health} onRefresh={refreshHealth}
+            agents={agents} health={health} connected={connected} onRefresh={refreshHealth}
             onNavigate={setPage}
             theme={theme} setTheme={setTheme}
             dayNight={settings?.day_night || 'day'} setDayNight={setDayNight}
@@ -510,9 +517,9 @@ export default function App() {
       </main>
 
       {/* notification toasts */}
-      <div className="toast-stack">
+      <div className="toast-stack" role="region" aria-label="Notifications" aria-live="polite" aria-relevant="additions">
         {toasts.map((x) => (
-          <div key={x.id} className={`toast-item ${x.kind}`}>{x.text}</div>
+          <div key={x.id} className={`toast-item ${x.kind}`}><span>{x.text}</span><button aria-label="Dismiss notification" onClick={() => setToasts((list) => list.filter((item) => item.id !== x.id))}>×</button></div>
         ))}
       </div>
 

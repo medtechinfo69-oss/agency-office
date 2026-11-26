@@ -1,8 +1,12 @@
 # Agency Office UI redesign
 
+> **Current UI/UX refresh (2026-11-26):** See [UI_UX_REVIEW.md](UI_UX_REVIEW.md) for the latest audit, implementation notes, complete-source delivery and verification. Historical implementation details below are retained for context.
+
+For current hosting setup and security requirements, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## Design plan
 
-- **Palette:** warm off-white `#F3F1EC`, white surfaces and subtle borders; dark near-black navy `#0B0E14`; indigo `#4F46E5` for primary actions and selection. Semantic status colours distinguish working, waiting, thinking, researching, idle and failed states.
+- **Palette:** cool slate `#F5F7FB`, white surfaces and subtle borders; dark near-black navy `#0B0E14`; indigo `#4F46E5` for primary actions and selection. Semantic status colours distinguish working, waiting, thinking, researching, idle and failed states.
 - **Typography and shape:** Inter-style system sans serif, monospace for compact technical metadata, tracked section labels, rounded bordered cards, and thin Lucide icons. Tokens and light/dark variants live in one theme file. The theme switch supports system, light and dark.
 - **Layout:** persistent sidebar, header and clock, responsive page layouts and phone navigation. The Office combines a stats strip, isometric scene, floor selector, hierarchical roster and journal. Chat, task Kanban, workflows, skills, health, shop and settings have dedicated screens.
 - **Artwork:** the isometric room and rounded robot characters are original inline SVG/React artwork; no reference-repository images are used. SVG scales to different resolutions without separate raster sprite sheets.
@@ -55,7 +59,7 @@ From the project directory, execute `./run.sh` (or double-click it where the des
 
 Configure a provider under **Settings → Connections → Providers**. Keys are submitted to and stored by the backend; the API does not return the stored key to the browser. Ollama can be configured and activated there without putting a key in `.env`.
 
-## Verification and limitations
+## Historical verification and limitations (before the current refresh)
 
 - The frontend production build succeeds and the offline backend suite passes 31 tests. The redesigned browser smoke suite passed 16/16 before the final health/label adjustments; a subsequent read-only navigation check visited all ten pages without JavaScript page errors. The full API sweep passed 55/55 before the redesign but was not rerun after it.
 - Not all new visual controls are backed by server features: the permissions matrix is browser-local and **does not enforce permissions**; the users and roles shown in Settings are illustrative, not an authentication or authorization system. Shop choices are persisted to agent customization, but furniture, decoration and theme catalog entries do not change the office scene. Floor 1 and Gym are empty views. Some page content remains English when French is selected.

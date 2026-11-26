@@ -57,7 +57,7 @@ export default function SkillsPage({ t, agents }) {
         <span className="eyebrow">Filters</span>
         {filters.map((f) => (
           <button key={f.id}
-            className={`filter-row ${scope === f.id ? 'on' : ''}`}
+            aria-pressed={scope === f.id} className={`filter-row ${scope === f.id ? 'on' : ''}`}
             onClick={() => setScope(f.id)}>
             <span>{f.label}</span>
             <span className="mono filter-count">{f.n}</span>
@@ -69,7 +69,7 @@ export default function SkillsPage({ t, agents }) {
         <div className="skills-bar">
           <label className="search-box">
             <Search size={14} />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search skills…" />
+            <input aria-label="Search skills" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search skills…" />
           </label>
           <Segmented ariaLabel="view"
             options={[{ id: 'grid', label: '', icon: LayoutGrid }, { id: 'list', label: '', icon: List }]}

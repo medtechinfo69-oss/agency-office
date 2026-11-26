@@ -16,3 +16,69 @@
 .siteforge-root .tabs{flex-wrap:nowrap;min-width:0}
 .siteforge-root .preview-frame.desktop{display:block}
 @container (max-width:650px){.siteforge-root .conversation{flex:0 0 460px;min-height:460px}.siteforge-root .editor{flex:0 0 600px;min-height:600px}}
+
+/* Shared Agency Office visual language; generated website previews are untouched. */
+.siteforge-root {
+  font-family: var(--font-ui);
+  --bg: #0b0e14; --panel: #141922; --panel2: #171d28; --field: #1d2431;
+  --border: #303a4c; --muted: #a8b0c0; --text: #e8eaf0;
+  --violet: #a5b4fc; --button: #4f46e5; --button-text: #fff; --stage: #0f131b;
+}
+.siteforge-root[data-studio-theme=light] {
+  --bg: #f5f7fb; --panel: #fff; --panel2: #f8fafc; --field: #eef2f7;
+  --border: #cbd5e1; --muted: #56657c; --text: #172033;
+  --violet: #4338ca; --button: #4f46e5; --button-text: #fff; --stage: #eef2f7;
+}
+.siteforge-root .brand { font-family: var(--font-ui); letter-spacing: -.03em; }
+.siteforge-root .btn { min-height: 44px; padding: 10px 16px; font-size: 12px; border-radius: 10px; }
+.siteforge-root .icon-btn, .siteforge-root .send-btn, .siteforge-root .rail > button { width: 44px; height: 44px; min-width: 44px; }
+.siteforge-root .rail { width: 64px; gap: 8px; }
+.siteforge-root .rail-logo, .siteforge-root .brand-symbol, .siteforge-root .avatar.ai { background: var(--button); color: #fff; }
+.siteforge-root .rail > button { color: var(--muted); }
+.siteforge-root .rail > button:hover, .siteforge-root .rail > button.rail-active { background: var(--field); color: var(--violet); }
+.siteforge-root .topbar { min-height: 80px; padding-inline: 24px; }
+.siteforge-root .project-select select, .siteforge-root .model-pill select { font-size: 12px; }
+.siteforge-root .model-pill { padding: 0 8px; min-height: 44px; }
+.siteforge-root .chat-bubble { font-size: 14px; padding: 16px; line-height: 1.8; border-radius: 12px; }
+.siteforge-root .user .chat-bubble { background: var(--button); border-color: var(--button); }
+.siteforge-root .sender, .siteforge-root .panel-heading strong { font-size: 13px; }
+.siteforge-root small, .siteforge-root .chat-disclaimer, .siteforge-root .top-status { font-size: 12px; color: var(--muted); }
+.siteforge-root .chat-date, .siteforge-root .tree-title, .siteforge-root .suggestion-label { color: var(--muted); font-size: 10px; }
+.siteforge-root .chat-bubble p span, .siteforge-root .chat-bubble a { color: var(--violet); }
+.siteforge-root .user .chat-bubble p span { color: #fff; }
+.siteforge-root .heading-icon { background: var(--field); color: var(--violet); }
+.siteforge-root .suggestions button, .siteforge-root .team-toggle { min-height: 44px; font-size: 12px; color: var(--muted); }
+.siteforge-root .composer { border-color: var(--border); padding: 16px; }
+.siteforge-root .composer textarea { font-size: 14px; line-height: 1.7; }
+.siteforge-root .composer textarea::placeholder { color: var(--muted); }
+.siteforge-root .send-btn { background: var(--button); color: #fff; border-radius: 10px; }
+.siteforge-root .tabs { gap: 16px; }
+.siteforge-root .tabs button { min-height: 44px; font-size: 12px; }
+.siteforge-root .tabs button.active:after { background: var(--violet); }
+.siteforge-root .notice { line-height: 1.7; font-size: 13px; }
+.siteforge-root .modal { border: 1px solid var(--border); border-radius: 16px; max-height: calc(100dvh - 32px); overflow: auto; }
+.siteforge-root .modal-head { padding: 24px; }
+.siteforge-root .overlay { backdrop-filter: blur(4px); }
+.siteforge-root button:focus-visible, .siteforge-root textarea:focus-visible, .siteforge-root select:focus-visible, .siteforge-root input:focus-visible { outline-color: var(--violet); }
+.siteforge-root .btn:disabled:hover { filter: none; }
+@media (max-width: 900px) {
+  .builder-workspace { height: calc(100dvh - 69px) !important; }
+}
+@container (max-width: 900px) {
+  .siteforge-root .topbar { padding-inline: 12px; gap: 8px; }
+  .siteforge-root .rail { display: none; }
+}
+@container (max-width: 650px) {
+  .siteforge-root .topbar { height: auto; min-height: 72px; flex-wrap: wrap; padding: 12px; }
+  .siteforge-root .topbar .model-pill { display: none; }
+  .siteforge-root .topbar .btn { padding-inline: 12px; }
+  .siteforge-root .topbar .project-select select { max-width: 130px; }
+  .siteforge-root .editor-nav { padding-inline: 12px; gap: 8px; overflow-x: auto; }
+  .siteforge-root .team-toggle { flex: 0 0 auto; }
+  .siteforge-root .conversation { flex-basis: 520px; min-height: 520px; }
+  .siteforge-root .modal-head, .siteforge-root .settings-content, .siteforge-root .lovable-content, .siteforge-root .qa-content { padding: 16px; }
+  .siteforge-root .modal-actions { flex-wrap: wrap; }
+}
+
+.siteforge-root .brand b, .siteforge-root .address b { color: var(--muted); }
+.siteforge-root .section-kicker { color: var(--violet); }

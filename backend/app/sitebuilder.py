@@ -11,7 +11,8 @@ from pydantic import BaseModel, Field
 
 ROOT=Path(__file__).resolve().parents[2]
 load_dotenv(ROOT/'.env')
-DATA=ROOT/'backend'/'data'; DATA.mkdir(exist_ok=True)
+from .config import settings as agency_settings
+DATA=agency_settings.data_dir
 DB=DATA/'siteforge.db'
 PROMPTS=ROOT/'prompts'/'sitebuilder'
 router=APIRouter()

@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 /* Shared UI primitives: StatusPill, Card, Kpi, Tabs, Segmented */
 
 const TONE = {
@@ -47,12 +49,25 @@ export function Kpi({ label, value, sub, mono, tone }) {
 }
 
 export function Tabs({ tabs, value, onChange, className = '' }) {
+  const navigate = (event) => {
+    const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End']
+    if (!keys.includes(event.key)) return
+    event.preventDefault()
+    const buttons = [...event.currentTarget.querySelectorAll('[role=tab]')]
+    const index = buttons.indexOf(document.activeElement)
+    const step = document.documentElement.dir === 'rtl' ? -1 : 1
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+      : (index + (event.key === 'ArrowRight' ? step : -step) + buttons.length) % buttons.length
+    buttons[next]?.focus()
+    buttons[next]?.click()
+  }
   return (
-    <div className={`tabs ${className}`} role="tablist">
+    <div className={`tabs ${className}`} role="tablist" aria-label="Sections" onKeyDown={navigate}>
       {tabs.map((tb) => (
         <button
           key={tb.id}
           role="tab"
+          tabIndex={value === tb.id ? 0 : -1}
           aria-selected={value === tb.id}
           className={`tab ${value === tb.id ? 'active' : ''}`}
           onClick={() => onChange(tb.id)}
@@ -68,12 +83,13 @@ export function Tabs({ tabs, value, onChange, className = '' }) {
 
 export function Segmented({ options, value, onChange, ariaLabel }) {
   return (
-    <div className="seg" role="radiogroup" aria-label={ariaLabel}>
+    <div className="seg" role="group" aria-label={ariaLabel}>
       {options.map((o) => (
         <button
           key={o.id}
           className={value === o.id ? 'on' : ''}
           onClick={() => onChange(o.id)}
+          aria-label={o.label || o.id}
           aria-pressed={value === o.id}
         >
           {o.icon && <o.icon size={13} />}
@@ -92,4 +108,21 @@ export function Empty({ icon = '🗂️', title, hint }) {
       {hint && <p>{hint}</p>}
     </div>
   )
+}
+
+// Wrap promise-returning UI actions without changing their API behavior.
+export function ActionButton({ onClick, children, disabled, ...props }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const run = async () => {
+    if (busy || disabled) return
+    setBusy(true); setError('')
+    try { await onClick() }
+    catch (e) { setError(e.message || 'Action failed. Please try again.') }
+    finally { setBusy(false) }
+  }
+  return <>
+    <button {...props} disabled={disabled || busy} aria-busy={busy} onClick={run}>{children}</button>
+    {error && <span className="np-err" role="alert">{error}</span>}
+  </>
 }

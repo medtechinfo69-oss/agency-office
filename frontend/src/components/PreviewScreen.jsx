@@ -1,8 +1,10 @@
+import useDialog from './useDialog'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 
 /* Preview: deliverables shown as Facebook / Instagram post & ad mockups */
 export default function PreviewScreen({ t, projectId, onClose }) {
+  const dialogRef = useDialog(onClose)
   const [deliverables, setDeliverables] = useState([])
   const [meta, setMeta] = useState({ drafts: [], configured: false })
   const [busy, setBusy] = useState('')
@@ -27,7 +29,7 @@ export default function PreviewScreen({ t, projectId, onClose }) {
   const run = async (fn, key) => {
     setBusy(key)
     setToast('')
-    try { await fn() } catch (e) { setToast('⚠ ' + e.message) }
+    try { await fn(); setToast('Completed successfully.') } catch (e) { setToast('⚠ ' + e.message) }
     setBusy('')
     load()
   }
@@ -40,10 +42,10 @@ export default function PreviewScreen({ t, projectId, onClose }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={t('preview')} tabIndex={-1} className="modal wide" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <span>👁 {t('preview')} — Facebook / Instagram</span>
-          <button className="ap-close" onClick={onClose}>✕</button>
+          <button className="ap-close" aria-label="Close dialog" onClick={onClose}>✕</button>
         </div>
 
         <div className="modal-toolbar">
@@ -70,7 +72,7 @@ export default function PreviewScreen({ t, projectId, onClose }) {
           </a>
         </div>
 
-        {toast && <div className="toast">{toast}</div>}
+        {toast && <div className="toast" role="status">{toast}</div>}
 
         <div className="modal-body">
           {tab === 'posts' && (
@@ -127,7 +129,7 @@ export default function PreviewScreen({ t, projectId, onClose }) {
           )}
 
           {tab === 'calendar' && (
-            <div>
+            <div className="analytics-table-wrap">
               {days.length === 0 && <div className="empty-hint">Generate the calendar first.</div>}
               <table className="cal-table">
                 <thead>

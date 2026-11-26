@@ -22,7 +22,7 @@ class EventBus:
 
     # -- connections -------------------------------------------------------
     async def connect(self, ws: WebSocket) -> None:
-        await ws.accept()
+        await ws.accept(subprotocol="agency-office" if "agency-office" in ws.scope.get("subprotocols", []) else None)
         self._clients.add(ws)
         # replay recent history so a fresh page load catches up
         for ev in list(self._history)[-100:]:

@@ -1,8 +1,10 @@
+import useDialog from './useDialog'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 
 /* Side panel when clicking an agent: task, conversation, memory, skills, tokens */
 export default function AgentPanel({ t, agent, tasks, messages, memory, onClose }) {
+  const dialogRef = useDialog(onClose)
   const [mem, setMem] = useState(memory || [])
   const [tab, setTab] = useState('task')
 
@@ -20,7 +22,7 @@ export default function AgentPanel({ t, agent, tasks, messages, memory, onClose 
   const xpInto = agent.xp % 100
 
   return (
-    <div className="agent-panel" onClick={(e) => e.stopPropagation()}>
+    <div className="agent-backdrop" onClick={onClose}><div ref={dialogRef} role="dialog" aria-modal="true" aria-label={`${agent.name} details`} tabIndex={-1} className="agent-panel" onClick={(e) => e.stopPropagation()}>
       <div className="ap-head" style={{ borderColor: agent.color }}>
         <div className="ap-avatar" style={{ background: agent.color }}>
           {(agent.name || '?')[0]}
@@ -29,7 +31,7 @@ export default function AgentPanel({ t, agent, tasks, messages, memory, onClose 
           <div className="ap-name">{agent.name}</div>
           <div className="ap-role">{agent.role}</div>
         </div>
-        <button className="ap-close" onClick={onClose}>✕</button>
+        <button className="ap-close" aria-label="Close agent details" onClick={onClose}>✕</button>
       </div>
 
       <div className="ap-stats">
@@ -44,7 +46,7 @@ export default function AgentPanel({ t, agent, tasks, messages, memory, onClose 
 
       <div className="ap-tabs">
         <button className={tab === 'task' ? 'active' : ''} onClick={() => setTab('task')}>🛠 {t('currentTask')}</button>
-        <button className={tab === 'chat' ? 'active' : ''} onClick={() => setTab('chat')}>💬</button>
+        <button className={tab === 'chat' ? 'active' : ''} aria-label="Conversation" onClick={() => setTab('chat')}>💬</button>
         <button className={tab === 'mem' ? 'active' : ''} onClick={() => setTab('mem')}>🧠 {t('memory')}</button>
         <button className={tab === 'skills' ? 'active' : ''} onClick={() => setTab('skills')}>⚡ {t('skills')}</button>
       </div>
@@ -118,6 +120,6 @@ export default function AgentPanel({ t, agent, tasks, messages, memory, onClose 
           </div>
         )}
       </div>
-    </div>
+    </div></div>
   )
 }
