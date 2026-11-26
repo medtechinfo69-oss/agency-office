@@ -4,6 +4,7 @@ import {Sparkles, ChevronDown, Monitor, Tablet, Smartphone, RefreshCw, ExternalL
 import './style.css'
 import { authFetch } from '../auth'
 import useDialog from '../components/useDialog'
+import { previewDocument } from './preview'
 import {mask, compactLink} from './handoff.mjs'
 type Project={id:string;name:string;brief:string;files:Record<string,string>;messages?:Message[];updated:number}
 type Message={role:string;content:string;created:number}
@@ -19,7 +20,7 @@ const badge=(m:Model)=>{const detail=m.parameters.match(/([\d.]+)\s*([BM])/i);co
 const displayDate=(n:number)=>new Date(n*1000).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})
 const suggestions=['Make the hero more impactful','Add a warmer color palette','Improve the mobile layout']
 const examples=['Restaurant','Insurance agency','Portfolio','SaaS landing','Garage','Clinic']
-function previewDoc(files:Record<string,string>){let html=files['index.html']||''; const css=(files['styles.css']||'').replace(/<\/style/gi,'<\\/style');const js=(files['script.js']||'').replace(/<\/script/gi,'<\\/script');html=html.replace(/<link[^>]*href=["']styles\.css["'][^>]*>/i,`<style>${css}</style>`).replace(/<script[^>]*src=["']script\.js["'][^>]*><\/script>/i,'').replace(/<\/body>/i,`<script>${js}</script></body>`);return html.replace(/<head[^>]*>/i,`$&<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">`)}
+function previewDoc(files:Record<string,string>){ return previewDocument(files) }
 export default function SiteBuilderPage({officeTheme}:{officeTheme:string}){
  const [systemDark,setSystemDark]=useState(()=>window.matchMedia('(prefers-color-scheme: dark)').matches)
  useEffect(()=>{const m=window.matchMedia('(prefers-color-scheme: dark)'); const change=(e:MediaQueryListEvent)=>setSystemDark(e.matches);m.addEventListener('change',change);return()=>m.removeEventListener('change',change)},[])

@@ -110,6 +110,15 @@ async def generate_image(project_id: str, title: str, ratio: str = "1:1",
         f"{prompt}"
     )
 
+    from .hosted_settings import refresh
+    refresh()
+    if settings.image_model in ('hf-flux-schnell','local-sd'):
+        from .ai_hub import image, ImageRequest
+        response = await image(ImageRequest(prompt=full_prompt[:2000]))
+        path=out_dir / f"{safe}.png"
+        path.write_bytes(response.body)
+        persist_file(path)
+        return {'path':str(path),'url':f'/media/{project_id}/{path.name}','source':'api','model':settings.image_model}
     note = ""
 
     # 1) provider's own images API — only when the preset supports it

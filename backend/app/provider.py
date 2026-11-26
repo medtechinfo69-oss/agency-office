@@ -99,11 +99,13 @@ def active_config() -> Optional[ProviderConfig]:
     key = settings.active_provider
     creds = (settings.provider_creds or {}).get(key) or {}
     preset = PROVIDER_PRESETS.get(key, {})
+    from . import db
+    if db.kv_get('disconnected_' + key) == '1': return None
     token = creds.get("token") or ""
     if not token and key != "ollama":
         # active has no token → first configured provider wins (if any)
         for k2, c2 in (settings.provider_creds or {}).items():
-            if c2.get("token"):
+            if c2.get("token") and db.kv_get("disconnected_" + k2) != "1":
                 key, creds = k2, c2
                 preset = PROVIDER_PRESETS.get(k2, {})
                 token = c2["token"]
@@ -113,7 +115,7 @@ def active_config() -> Optional[ProviderConfig]:
     return ProviderConfig(
         key=key,
         label=preset.get("label", key),
-        base_url=(creds.get("base_url") or preset.get("base_url", settings.api_base_url)).rstrip("/"),
+        base_url=(creds.get("base_url") or preset.get("base_url", settings.api_base_url)).rstrip("/").removesuffix("/api") + "/v1" if key=="ollama_cloud" and (creds.get("base_url") or preset.get("base_url", "")).rstrip("/").endswith("/api") else (creds.get("base_url") or preset.get("base_url", settings.api_base_url)).rstrip("/"),
         token=token or "ollama",
         model=creds.get("model") or preset.get("model", settings.text_model),
         headers=dict(preset.get("headers") or {}),
@@ -131,7 +133,8 @@ def configured_configs() -> list[ProviderConfig]:
         out.append(ac)
         seen.add(ac.key)
     for key, preset in PROVIDER_PRESETS.items():
-        if key in seen:
+        from . import db
+        if key in seen or db.kv_get("disconnected_" + key) == "1":
             continue
         creds = (settings.provider_creds or {}).get(key) or {}
         token = creds.get("token") or ""
@@ -140,7 +143,7 @@ def configured_configs() -> list[ProviderConfig]:
         out.append(ProviderConfig(
             key=key,
             label=preset.get("label", key),
-            base_url=(creds.get("base_url") or preset["base_url"]).rstrip("/"),
+            base_url=(creds.get("base_url") or preset["base_url"]).rstrip("/").removesuffix("/api") + "/v1" if key=="ollama_cloud" and (creds.get("base_url") or preset["base_url"]).rstrip("/").endswith("/api") else (creds.get("base_url") or preset["base_url"]).rstrip("/"),
             token=token or "ollama",
             model=creds.get("model") or preset["model"],
             headers=dict(preset.get("headers") or {}),
@@ -169,7 +172,7 @@ def classify_models(key: str, entries: list[tuple[str, dict]]) -> list[dict]:
         elif key == "apinex":
             free = mid.startswith("free/") or "/free-" in mid
         else:
-            free = True  # Groq/Gemini free tiers, Ollama local
+            free = key in ("groq", "gemini", "ollama")  # Unknown commercial catalogs are not labelled free.
         out.append({"id": mid, "free": free, "image": bool(_IMG_RE.search(mid))})
     out.sort(key=lambda m: (not m["free"],))  # stable — provider order kept
     return out
@@ -197,14 +200,15 @@ async def fetch_models(key: str, base_url: str, token: str) -> dict:
     }
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(20.0),
-                                 headers=headers, follow_redirects=True) as client:
-        if key == 'ollama':
+                                 headers=headers, follow_redirects=False) as client:
+        if key in ('ollama', 'ollama_cloud'):
             if os.getenv('VERCEL') == '1' and any(host in base for host in ('localhost', '127.0.0.1', '[::1]')):
                 out['error'] = 'Local Ollama is not reachable from Vercel. Use a secured, remotely reachable runtime endpoint.'
                 return out
             try:
                 endpoint = base[:-3] if base.endswith('/v1') else base
-                response = await client.get(endpoint + '/api/tags')
+                endpoint = endpoint[:-4] if endpoint.endswith('/api') else endpoint
+                response = await client.get(endpoint + '/api/tags', headers={'Authorization': 'Bearer ' + token} if token else {})
                 response.raise_for_status()
                 tags = response.json().get('models', [])
                 out['models'] = [{'id': item.get('name') or item.get('model'), 'free': True,
@@ -310,6 +314,9 @@ class OpenAIProvider(BaseProvider):
         return h
 
     async def _request(self, method: str, path: str, payload: dict) -> dict:
+        from .ai_hub import validate_endpoint
+        try: validate_endpoint(self.base,local=self.cfg.key=='ollama',resolve=os.getenv('VERCEL')=='1')
+        except Exception: raise ProviderError('bad_request','Provider endpoint is not permitted or cannot be resolved.') from None
         url = f"{self.base}{path}"
         last_err: Optional[ProviderError] = None
         for attempt in range(self.max_retries):
@@ -332,7 +339,7 @@ class OpenAIProvider(BaseProvider):
                 if resp.status_code == 402:
                     raise ProviderError(
                         "payment",
-                        f"HTTP 402: {resp.text[:220]} "
+                        f"HTTP 402: upstream request rejected "
                         "(top up your APInex account, or set DEMO_MODE=true in .env to explore offline)",
                         402)
                 if resp.status_code == 404:
@@ -347,15 +354,15 @@ class OpenAIProvider(BaseProvider):
                 if resp.status_code == 429:
                     retry_after = resp.headers.get("Retry-After")
                     delay = float(retry_after) if retry_after and retry_after.isdigit() else None
-                    last_err = ProviderError("rate_limit", f"HTTP 429: {resp.text[:200]}", 429)
+                    last_err = ProviderError("rate_limit", f"HTTP 429: upstream request rejected", 429)
                     if delay is None:
                         delay = self._backoff(attempt)
                     await asyncio.sleep(min(delay, 30))
                     continue
                 if resp.status_code >= 500:
-                    last_err = ProviderError("server", f"HTTP {resp.status_code}: {resp.text[:200]}", resp.status_code)
+                    last_err = ProviderError("server", f"HTTP {resp.status_code}: upstream request rejected", resp.status_code)
                 else:
-                    raise ProviderError("bad_request", f"HTTP {resp.status_code}: {resp.text[:300]}", resp.status_code)
+                    raise ProviderError("bad_request", f"HTTP {resp.status_code}: upstream request rejected", resp.status_code)
             # backoff before next attempt
             await asyncio.sleep(self._backoff(attempt))
         assert last_err is not None

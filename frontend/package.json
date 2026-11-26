@@ -7,14 +7,15 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint src/App.jsx src/main.jsx src/components/admin-ui.jsx src/components/AuthGate.jsx src/components/Sidebar.jsx src/components/TopBar.jsx src/pages/SettingsPage.jsx src/pages/admin-models.js --max-warnings=0",
-    "test": "node --test src/supabase.test.mjs src/sitebuilder/handoff.test.mjs scripts/configure-hosting.test.mjs src/pages/admin-models.test.mjs"
+    "lint": "eslint src --max-warnings=0",
+    "test": "node --test src/supabase.test.mjs src/sitebuilder/handoff.test.mjs scripts/configure-hosting.test.mjs src/pages/admin-models.test.mjs src/sitebuilder/preview.test.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
     "@supabase/supabase-js": "^2.119.2",
     "framer-motion": "^11.18.2",
     "lucide-react": "^1.81.0",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

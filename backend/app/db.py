@@ -329,10 +329,13 @@ def add_message(text: str, channel: str = "system", project_id: Optional[str] = 
 
 def kv_get(key: str, default: Optional[str] = None) -> Optional[str]:
     row = one("SELECT value FROM settings_kv WHERE key=?", (key,))
-    return row["value"] if row else default
+    from .vault import decrypt, sensitive
+    return decrypt(row["value"]) if row and sensitive(key) else row["value"] if row else default
 
 
 def kv_set(key: str, value: str) -> None:
+    from .vault import encrypt, sensitive
+    if sensitive(key): value = encrypt(value)
     execute(
         "INSERT INTO settings_kv (key, value) VALUES (?,?) "
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value",

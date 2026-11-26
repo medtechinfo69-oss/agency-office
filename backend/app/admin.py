@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from . import db
 
 router = APIRouter(prefix='/api/admin', tags=['administration'])
-RESOURCES = ['projects', 'agents', 'connections', 'access', 'users', 'roles', 'instance', 'settings']
+RESOURCES = ['projects', 'agents', 'connections', 'access', 'users', 'roles', 'instance', 'settings', 'logs', 'billing']
 STARTED = time.time()
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS admin_users (
@@ -32,9 +32,11 @@ CREATE TABLE IF NOT EXISTS admin_keys (
 
 
 def initialize():
+    from . import account_security
+    account_security.initialize()
     db.get_conn().executescript(SCHEMA)
     db.get_conn().commit()
-    for role in ['Admin', 'Editor', 'Viewer']:
+    for role in ['Admin', 'Manager', 'Editor', 'Viewer']:
         permissions = {r: {'read': True, 'write': role == 'Admin' or (role == 'Editor' and r in ('projects', 'agents'))} for r in RESOURCES}
         db.execute('INSERT INTO admin_roles(id,permissions) VALUES(?,?) ON CONFLICT(id) DO NOTHING', (role, db.jdump(permissions)))
     db.execute("INSERT INTO admin_users(id,name,email,role,status,created_at) VALUES('owner','Workspace owner','','Owner','active',?) ON CONFLICT(id) DO NOTHING", (time.time(),))
@@ -58,7 +60,7 @@ def user(uid):
 
 
 def public_user(row):
-    return {k: row[k] for k in ('id', 'name', 'email', 'role', 'status', 'created_at')}
+    return {**{k: row[k] for k in ('id', 'name', 'email', 'role', 'status', 'created_at')}, 'last_login': db.kv_get('last_login_'+row['id']), 'avatar': db.jload(db.kv_get('profile_preferences_'+row['id'],'{}'),{}).get('avatar','')}
 
 
 def version(uid):
@@ -73,18 +75,20 @@ def login(email, password, fallback):
     return row['id'] if valid else None
 
 
-def permits(identity, resource, write=False):
+def permits(identity, resource, write=False, action=None):
     if identity['role'] == 'Owner': return True
     role = db.one('SELECT permissions FROM admin_roles WHERE id=?', (identity['role'],))
-    return bool(role and db.jload(role['permissions'], {}).get(resource, {}).get('write' if write else 'read'))
+    policy = db.jload(role['permissions'], {}).get(resource, {}) if role else {}
+    return bool(policy.get(action, policy.get('write' if write else 'read', False)))
 
 
 def resource(path):
     path = path.removeprefix('/api/')
+    if path.startswith(('sitebuilder/settings','sitebuilder/ollama','sitebuilder/providers')): return 'connections'
     if path.startswith('admin/'):
         group = path.split('/')[1]
-        return {'keys': 'access', 'roles': 'roles', 'users': 'users', 'diagnostics': 'instance', 'instance': 'instance', 'agent-control': 'agents', 'models': 'connections'}.get(group, 'settings')
-    if path.startswith(('providers', 'settings')): return 'connections'
+        return {'keys': 'access', 'roles': 'roles', 'users': 'users', 'diagnostics': 'instance', 'instance': 'instance', 'configuration': 'instance', 'storage': 'instance', 'health-checks': 'instance', 'policy': 'access', 'audit': 'logs', 'agent-detail': 'agents', 'agent-control': 'agents', 'models': 'connections'}.get(group, 'settings')
+    if path.startswith(('providers', 'settings', 'models')): return 'connections'
     if path.startswith(('agents', 'prompts')): return 'agents'
     if path.startswith(('health',)): return 'instance'
     return 'projects'
@@ -107,7 +111,7 @@ def current(request):
 @router.get('/me')
 def me(request: Request):
     identity = current(request)
-    return {**identity, 'permissions': {r: {a: permits(identity, r, a == 'write') for a in ('read', 'write')} for r in RESOURCES}}
+    return {**identity, 'permissions': {r: {a: permits(identity, r, a != 'read', action=a) for a in ('read', 'write', 'create', 'edit', 'delete')} for r in RESOURCES}}
 
 
 class Profile(BaseModel):
@@ -160,8 +164,8 @@ def check_grant(request, role):
     identity = getattr(request.state, 'identity', None)
     if not identity or identity['role'] == 'Owner': return
     for resource_name in RESOURCES:
-        for write in (False, True):
-            if permits({'role': role}, resource_name, write) and not permits(identity, resource_name, write):
+        for action in ('read','write','create','edit','delete'):
+            if permits({'role': role}, resource_name, action!='read', action=action) and not permits(identity, resource_name, action!='read', action=action):
                 raise HTTPException(403, 'You cannot assign a role with permissions beyond your own.')
 
 
@@ -212,7 +216,7 @@ def accept_invite(body):
 
 @router.get('/roles')
 def roles():
-    return [{'id': r['id'], 'permissions': db.jload(r['permissions'], {})} for r in db.query('SELECT * FROM admin_roles ORDER BY id')]
+    return [{'id': r['id'], 'permissions': db.jload(r['permissions'], {}), 'member_count': db.one('SELECT count(*) AS n FROM admin_users WHERE role=?',(r['id'],))['n']} for r in db.query('SELECT * FROM admin_roles ORDER BY id')]
 
 
 class Role(BaseModel):
@@ -220,11 +224,22 @@ class Role(BaseModel):
 
 
 @router.put('/roles/{rid}')
-def save_role(rid: str, body: Role):
+def save_role(rid: str, body: Role, request: Request = None):
     if not db.one('SELECT id FROM admin_roles WHERE id=?', (rid,)): raise HTTPException(404, 'Unknown role.')
-    permissions = {r: {a: bool(body.permissions.get(r, {}).get(a, False)) for a in ('read', 'write')} for r in RESOURCES}
+    permissions = {}
+    for r in RESOURCES:
+        incoming=body.permissions.get(r,{})
+        value={a:bool(incoming.get(a,incoming.get('write',False) if a!='read' else False)) for a in ('read','write','create','edit','delete')}
+        value['write']=any(value[a] for a in ('create','edit','delete'))
+        permissions[r]=value
     for value in permissions.values():
         if value['write']: value['read'] = True
+    identity = getattr(request.state, 'identity', None) if request else None
+    if identity and identity['role'] != 'Owner':
+        for resource_name, grants in permissions.items():
+            for action, allowed in grants.items():
+                if allowed and not permits(identity, resource_name, action != 'read', action=action):
+                    raise HTTPException(403, 'You cannot grant permissions beyond your own.')
     db.execute('UPDATE admin_roles SET permissions=? WHERE id=?', (db.jdump(permissions), rid))
     return {'ok': True}
 

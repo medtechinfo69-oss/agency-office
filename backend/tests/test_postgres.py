@@ -92,3 +92,21 @@ def test_admin_schema_postgres(monkeypatch):
     db.execute("DELETE FROM admin_users WHERE email='pg-invite@example.test'")
     db.execute("DELETE FROM admin_keys WHERE name='Postgres key'")
     db._conn.close()
+
+
+@pytest.mark.skipif(not os.getenv('TEST_POSTGRES_URL'), reason='Requires disposable local PostgreSQL')
+def test_guardrails_and_security_postgres(monkeypatch):
+    url=os.environ['TEST_POSTGRES_URL']
+    assert 'host=/tmp/' in url or '@localhost' in url or '@127.0.0.1' in url
+    monkeypatch.setenv('DATABASE_URL',url)
+    from app import db,admin,guardrails
+    from app.access import OwnerAccess
+    monkeypatch.setattr(db,'_conn',None)
+    admin.initialize();guardrails.initialize()
+    assert guardrails.consume('pg-test-only',1)
+    assert not guardrails.consume('pg-test-only',1)
+    access=OwnerAccess(managed=True,password='postgres-test-password',secret='postgres-stable-secret-at-least32characters')
+    token=access.issue('session',60)
+    assert access.valid(token,'session')
+    db.execute('DELETE FROM request_limits')
+    db._conn.close()

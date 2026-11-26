@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from './api'
 import { connectWS } from './ws'
 import { t as translate, dir } from './i18n'
 import Sidebar, { NAV } from './components/Sidebar'
 import TopBar from './components/TopBar'
+import CommandCenter from './components/CommandCenter'
+import { loadModels } from './model-store'
 import AgentPanel from './components/AgentPanel'
 import PreviewScreen from './components/PreviewScreen'
 import AnalyticsScreen from './components/AnalyticsScreen'
@@ -19,7 +21,8 @@ import PermissionsPage from './pages/PermissionsPage'
 import SystemHealthPage from './pages/SystemHealthPage'
 import ShopPage from './pages/ShopPage'
 import SettingsPage, { ADMIN_PAGES } from './pages/SettingsPage'
-import SiteBuilderPage from './sitebuilder/main'
+const SiteBuilderPage = lazy(() => import('./sitebuilder/main'))
+const BuilderPage = lazy(() => import('./pages/BuilderPage'))
 
 /* Simple WebAudio blips (no assets needed) */
 const audio = {
@@ -71,8 +74,10 @@ export default function App({ onLogout } = {}) {
   }, [])
   useEffect(() => {
     const load = () => api.get('/admin/me').then(setProfile).catch(() => {})
+    const prefs = () => api.get('/admin/me/preferences').then(p => { localStorage.setItem('ao_profile_language',p.language); localStorage.setItem('ao_activity_notifications',p.activity_notifications?'on':'off'); localStorage.setItem('ao_sound',p.sound?'on':'off'); setLang(p.language) }).catch(() => {})
+    prefs(); window.addEventListener('agency:preferences-updated', prefs)
     load(); window.addEventListener('agency-profile-updated', load)
-    return () => window.removeEventListener('agency-profile-updated', load)
+    return () => { window.removeEventListener('agency-profile-updated', load); window.removeEventListener('agency:preferences-updated', prefs) }
   }, [])
   const [builderVisited, setBuilderVisited] = useState(() => location.hash === '#builder')
   const [theme, setTheme] = useState(() => localStorage.getItem('ao_theme') || 'night')
@@ -129,6 +134,7 @@ export default function App({ onLogout } = {}) {
 
   /* ---------------- websocket ---------------- */
   const handleEvent = useCallback((ev) => {
+    const activityToast = (...args) => { if (localStorage.getItem('ao_activity_notifications') !== 'off' || args[1] === 'error') pushToast(...args) }
     const { type, data, project_id } = ev
     if (project_id && projectId && project_id !== projectId &&
         !['log', 'settings', 'new_hire', 'agent_created', 'agent_updated', 'agent_removed'].includes(type)) return
@@ -142,7 +148,7 @@ export default function App({ onLogout } = {}) {
       case 'log':
         setLog((l) => [...l.slice(-400), data])
         if (data.level === 'success') audio.play('good')
-        if (data.level === 'error') { audio.play('bad'); pushToast(data.text, 'error') }
+        if (data.level === 'error') { audio.play('bad'); activityToast(data.text, 'error') }
         break
       case 'agent_state':
         setAgents((list) => list.map((a) => a.id === data.agent_id
@@ -175,25 +181,25 @@ export default function App({ onLogout } = {}) {
         break
       case 'plan_ready':
         setApproval({ kind: 'plan', plan: data.plan })
-        pushToast('📋 Nora sent a plan — approve to start work', 'warn')
+        activityToast('📋 Nora sent a plan — approve to start work', 'warn')
         break
       case 'approval_required':
         if (data.kind === 'plan') {
           setApproval({ kind: 'plan', plan: data.plan })
-          pushToast('📋 Plan ready for approval', 'warn')
+          activityToast('📋 Plan ready for approval', 'warn')
         } else {
           setApproval({ kind: 'deliverable', package: data.package })
-          pushToast('📦 Final package ready — approve to deliver', 'success')
+          activityToast('📦 Final package ready — approve to deliver', 'success')
         }
         break
       case 'escalation':
         setEscalation(data)
-        pushToast('⚠️ Nora needs your guidance', 'warn')
+        activityToast('⚠️ Nora needs your guidance', 'warn')
         break
       case 'delivered':
         setApproval(null)
         audio.play('good')
-        pushToast('🎉 Package delivered!', 'success')
+        activityToast('🎉 Package delivered!', 'success')
         loadProject(projectId)
         break
       case 'control':
@@ -205,17 +211,17 @@ export default function App({ onLogout } = {}) {
         break
       case 'level_up':
         loadAgents()
-        pushToast(`⭐ ${data.name} reached level ${data.level}!`, 'success')
+        activityToast(`⭐ ${data.name} reached level ${data.level}!`, 'success')
         break
       case 'promotion':
         loadAgents()
         audio.play('hire')
-        pushToast(`🎉 PIXEL promoted to ${data.role}!`, 'success')
+        activityToast(`🎉 PIXEL promoted to ${data.role}!`, 'success')
         break
       case 'new_hire':
         loadAgents()
         audio.play('hire')
-        pushToast(`🆕 New hire: ${data.name}`, 'success')
+        activityToast(`🆕 New hire: ${data.name}`, 'success')
         break
       case 'agent_created':
       case 'agent_updated':
@@ -230,10 +236,10 @@ export default function App({ onLogout } = {}) {
         break
       case 'meeting_end':
         setLog((l) => [...l, { level: 'success', text: `🧠 Meeting ended — best: ${String(data.best).slice(0, 100)}` }])
-        pushToast('🧠 Brainstorm complete', 'success')
+        activityToast('🧠 Brainstorm complete', 'success')
         break
       case 'agent_stuck':
-        pushToast(`⛔ ${data.agent_id} is stuck: ${data.message}`, 'error')
+        activityToast(`⛔ ${data.agent_id} is stuck: ${data.message}`, 'error')
         break
       default:
         break
@@ -258,11 +264,13 @@ export default function App({ onLogout } = {}) {
   useEffect(() => {
     const r = document.documentElement
     r.classList.remove('theme-light', 'theme-dark')
-    if (theme === 'day') r.classList.add('theme-light')
-    if (theme === 'night') r.classList.add('theme-dark')
+    const media = matchMedia('(prefers-color-scheme: dark)')
+    const apply = () => { r.classList.remove('theme-light', 'theme-dark'); r.classList.add(theme === 'day' || theme === 'auto' && !media.matches ? 'theme-light' : 'theme-dark') }
+    apply(); media.addEventListener('change', apply)
     localStorage.setItem('ao_theme', theme)
     r.dataset.accent = localStorage.getItem('ao_accent') || 'indigo'
     r.dataset.density = localStorage.getItem('ao_density') || 'comfortable'
+    return () => media.removeEventListener('change', apply)
   }, [theme])
 
   /* ---------------- boot (parallel for fast first paint) ---------------- */
@@ -272,8 +280,8 @@ export default function App({ onLogout } = {}) {
         const [h, s] = await Promise.all([api.health(), api.settings()])
         setHealth(h)
         setSettings(s)
-        setLang(s.language || 'en')
-        localStorage.setItem('ao_sound', s.sound || 'on')
+        setLang(localStorage.getItem('ao_profile_language') || s.language || 'en')
+        if (localStorage.getItem('ao_sound') === null) localStorage.setItem('ao_sound', s.sound || 'on')
         const [list] = await Promise.all([loadProjects(), loadAgents()])
         if (list.length) {
           const id = list[0].id
@@ -433,9 +441,18 @@ export default function App({ onLogout } = {}) {
     : adminItem ? adminItem.label : (t('nav.' + page) !== 'nav.' + page ? t('nav.' + page) : navItem.label)
   const question = t('sub.' + page)
 
+  useEffect(() => {
+    loadModels().catch(() => {})
+    const interval = setInterval(() => loadModels(true).then(async (catalog) => { if (!catalog.selection.model) return; const result = await api.post('/models/fallback', catalog.selection); if (result.changed) { await loadModels(); window.dispatchEvent(new Event('agency:model-changed')); pushToast(`${result.warning} ${result.selection.provider} / ${result.selection.model}`, 'warning') } }).catch(() => {}), 60000)
+    const changed = () => { api.health().then(setHealth).catch(() => {}) }
+    window.addEventListener('agency:model-changed', changed)
+    return () => { clearInterval(interval); window.removeEventListener('agency:model-changed', changed) }
+  }, [])
+
   /* ---------------- render ---------------- */
   return (
     <div className={`app ${night ? 'night' : 'day'}`} dir={dir(lang)}>
+      <CommandCenter onNavigate={setPage} />
       <a className="skip-link" href="#main-content">Skip to content</a>
       <Sidebar
         page={page} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} profile={profile} onNavigate={(p) => { if (p === 'builder') setBuilderVisited(true); setPage(p); setPicked(null) }}
@@ -446,7 +463,7 @@ export default function App({ onLogout } = {}) {
         onLogout={onLogout || (() => pushToast('Local mode has no sign-in session', 'info'))}
       />
 
-      <main id="main-content" tabIndex={-1} className={`workspace ${page === 'builder' ? 'builder-workspace' : ''}`}>
+      <main id="main-content" tabIndex={-1} className={`workspace ${page === 'builder' ? 'builder-workspace' : ''} ${['projects','logs','health','settings/diagnostics','settings/users','settings/roles'].includes(page) ? 'data-workspace' : ''}`}>
         {import.meta.env.VITE_EVENT_TRANSPORT === 'poll' && (
           <div className="feedback-banner a-cloud-notice" role="note">Cloud mode: keep this tab open to advance jobs. Scheduled runs are unavailable on this hosting setup. Add a cloud AI provider key in Settings to generate real content.</div>
         )}
@@ -476,7 +493,8 @@ export default function App({ onLogout } = {}) {
         {loading && page !== 'builder' && <div className="feedback-banner" role="status"><span className="loading-dot" /> Loading your workspace…</div>}
         {loadError && page !== 'builder' && <div className="feedback-banner error" role="alert"><span>{loadError}</span><button className="btn sm" onClick={() => window.location.reload()}>Retry</button></div>}
 
-        {builderVisited && <div style={{display: page === 'builder' ? 'contents' : 'none'}}><SiteBuilderPage officeTheme={theme} /></div>}
+        {builderVisited && <div style={{display: page === 'builder' ? 'contents' : 'none'}}><Suspense fallback={<div className="feedback-banner" role="status">Loading Builder…</div>}><BuilderPage active={page === 'builder'} notify={pushToast} onLegacy={() => setPage('builder-legacy')} /></Suspense></div>}
+        {page === 'builder-legacy' && <Suspense fallback={<div role="status">Loading runtime tools…</div>}><SiteBuilderPage officeTheme={theme} /></Suspense>}
 
         {page === 'office' && (
           <OfficePage

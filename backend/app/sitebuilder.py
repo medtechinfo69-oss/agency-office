@@ -103,7 +103,11 @@ def render_site(p):
 class NewProject(BaseModel): name:str=Field(min_length=1,max_length=120); brief:str=Field(default='',max_length=12000)
 class Rename(BaseModel): name:str=Field(min_length=1,max_length=120)
 class Save(BaseModel): files:dict; label:str='Manual edit'
-class Generate(BaseModel): prompt:str=Field(min_length=1,max_length=12000); mode:str='build'; language:str='en'
+class Generate(BaseModel):
+    prompt:str=Field(min_length=1,max_length=12000)
+    mode:str=Field(default='build',pattern='^(build|edit|marketing)$')
+    language:str=Field(default='en',pattern='^(en|fr|ar)$')
+    image:str|None=Field(default=None,max_length=1400000)
 class ModelChoice(BaseModel): provider:str='ollama'; model:str=Field(min_length=1,max_length=200)
 class Pull(BaseModel): model:str=Field(min_length=1,max_length=200)
 
@@ -149,13 +153,13 @@ def export(pid:str):
     return Response(bio.getvalue(),media_type='application/zip',headers={'Content-Disposition':'attachment; filename="siteforge-export.zip"'})
 @router.get('/settings')
 def settings():
-    provider=get_setting('provider',os.getenv('PROVIDER','ollama')); model=get_setting('model',DEFAULT)
-    return {'provider':provider,'model':model,'providers':[{'id':k,'label':v[0],'configured': k=='ollama' or bool(provider_key(k))} for k,v in PROVIDERS.items()]}
+    from .ai_hub import selected
+    data=selected()
+    return {**data,'providers':[{'id':k,'label':v['label'],'configured': k=='ollama' or bool(agency_settings.provider_creds.get(k,{}).get('token'))} for k,v in __import__('app.config',fromlist=['PROVIDER_PRESETS']).PROVIDER_PRESETS.items()]}
 @router.put('/settings')
 def update_settings(body:ModelChoice):
-    if body.provider not in PROVIDERS: raise HTTPException(400,'Unknown provider')
-    if body.provider=='openrouter' and not body.model.endswith(':free'): raise HTTPException(400,'Only OpenRouter :free models are permitted')
-    set_setting('provider',body.provider); set_setting('model',body.model); return {'ok':True}
+    from .ai_hub import selection, Selection
+    return selection(Selection(provider=body.provider,model=body.model))
 @router.get('/ollama/models')
 async def ollama_models():
     try:
@@ -219,49 +223,16 @@ def provider_key(provider):
     return saved if saved is not None else os.getenv(PROVIDERS[provider][1] or '', '')
 
 def candidates():
-    selected=get_setting('provider',os.getenv('PROVIDER','ollama')); model=get_setting('model',DEFAULT)
-    out=[]
-    if selected in PROVIDERS:
-        if (selected=='ollama' and os.getenv('VERCEL') != '1') or (selected!='ollama' and provider_key(selected)): out.append((selected,model))
-    for k in ('ollama','openrouter','groq','gemini'):
-        if k==selected: continue
-        if k=='ollama':
-            if os.getenv('VERCEL') != '1': out.append((k,DEFAULT))
-        elif provider_key(k): out.append((k,DEFAULT_CLOUD[k]))
-    return out
+    from .provider import configured_configs
+    return [(c.key,c.model) for c in configured_configs() if c.model]
 
-async def model_reply(provider,model,system,user):
-    timeout=httpx.Timeout(55 if os.getenv("VERCEL") == "1" else 900,connect=12)
-    if provider=='ollama':
-        old=get_setting('active_model','')
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            if old and old!=model:
-                r=await client.post(OLLAMA+'/api/generate',json={'model':old,'keep_alive':0}); r.raise_for_status()
-            payload={'model':model,'messages':[{'role':'system','content':system},{'role':'user','content':user}],'stream':True,'format':'json','keep_alive':'30m','options':{'num_ctx':4096,'temperature':0.3,'num_predict':1800}}
-            async with client.stream('POST',OLLAMA+'/api/chat',json=payload) as r:
-                r.raise_for_status(); set_setting('active_model',model)
-                async for line in r.aiter_lines():
-                    if not line: continue
-                    d=json.loads(line)
-                    if d.get('error'): raise ValueError('Ollama generation failed')
-                    token=d.get('message',{}).get('content','')
-                    if token: yield token
-    else:
-        key=provider_key(provider)
-        if not key: raise ValueError('Provider key not configured')
-        if provider=='openrouter' and not model.endswith(':free'): raise ValueError('Only free OpenRouter models allowed')
-        bases={'openrouter':'https://openrouter.ai/api/v1','groq':'https://api.groq.com/openai/v1','gemini':'https://generativelanguage.googleapis.com/v1beta/openai'}
-        payload={'model':model,'messages':[{'role':'system','content':system},{'role':'user','content':user}],'temperature':0.3,'stream':True,'max_tokens':1800}
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream('POST',bases[provider]+'/chat/completions',headers={'Authorization':'Bearer '+key},json=payload) as r:
-                r.raise_for_status()
-                async for line in r.aiter_lines():
-                    if line.startswith('data: ') and line[6:]!='[DONE]':
-                        d=json.loads(line[6:]); delta=d.get('choices',[{}])[0].get('delta',{}).get('content','')
-                        if delta: yield delta
+async def model_reply(provider,model,system,user,image=None):
+    from .ai_hub import stream_complete
+    async for chunk in stream_complete(provider,model,[{'role':'system','content':system},{'role':'user','content':user}],image):
+        yield chunk
 
 @router.post('/projects/{pid}/generate')
-async def generate(pid:str,body:Generate):
+async def generate(pid:str,body:Generate,request:Request):
     p=project(pid); save_message(pid,'user',body.prompt)
     async def stream():
         start=time.monotonic(); yield event('step',step='Queued',message='Waiting for the generation queue…')
@@ -269,27 +240,52 @@ async def generate(pid:str,body:Generate):
             mode=body.mode if body.mode in ('build','edit','marketing') else 'build'
             promptfile='planner.txt' if mode=='build' else 'edit.txt' if mode=='edit' else 'marketing.txt'
             system=(PROMPTS/promptfile).read_text()
+            if mode != 'marketing':
+                system = 'You are a professional front-end engineer and product designer. Output a JSON object with files {"index.html": "...", "styles.css": "...", "script.js": "..."} and summary. Create a distinctive complete site responding to the real brief, not a generic template. Semantic HTML5, mobile-first responsive CSS, visible focus, accessible contrast, meaningful content, no lorem ipsum, no external JavaScript or network requests. Link styles.css and script.js. No dependencies. Keep code concise and complete. For edits return all three files, preserving unrelated content.'
             if mode=='edit':
                 combined=json.dumps(p['files'],ensure_ascii=False)
-                if len(combined)>12000:
-                    yield event('error',message='This edit exceeds the 4096-token context budget. Edit a file manually or shorten it first.'); return
+                if len(combined)>120000:
+                    yield event('error',message='This edit exceeds the safe context size. Edit a file manually or shorten it first.'); return
                 user=f'Change request: {body.prompt}\nCurrent files: {combined}'
             else: user=f'Language: {body.language}. Project: {p["name"]}. Brief: {body.prompt}'
             yield event('step',step='Planning' if mode=='build' else 'Writing code' if mode=='edit' else 'Marketing',message='Nora is preparing your request.')
             errors=[]
-            for i,(provider,model) in enumerate(candidates()):
+            original_issues=[]
+            choices=candidates()
+            if body.image:
+                from .ai_hub import models as catalog
+                available=await catalog()
+                choices=[(p['provider'],m['id']) for p in available['providers'] if p.get('valid') for m in p.get('models',[]) if 'Vision' in m.get('tags',[])]
+                if not choices:
+                    yield event('error',message='No verified Vision model. Test a vision-capable connection before attaching a reference.'); return
+            for i,(provider,model) in enumerate(choices[:3]):
+                if await request.is_disconnected(): return
+                if time.monotonic()-start>220:
+                    yield event('error',message='Generation reached the safe serverless time budget. Saved files are preserved; retry with a faster model.');return
                 if i: yield event('step',step='Fallback',message=f'Switched to {model} ({provider}) after a provider error.')
-                for attempt in range(3):
+                for attempt in range(2):
                     try:
                         raw=''; begin=time.monotonic()
                         retry_user=user if attempt==0 else user+'\nYour previous response was invalid JSON. Output valid JSON only, with every field properly quoted.'
-                        async for chunk in model_reply(provider,model,system,retry_user):
+                        async for chunk in model_reply(provider,model,system,retry_user,body.image):
                             raw+=chunk
                             if len(raw)>350000: raise ValueError('Output too large')
                             yield event('token',text=chunk)
                         result=repair_json(raw)
                         if not isinstance(result,dict): raise ValueError('Expected object')
-                        if mode=='build':
+                        if mode!='marketing' and isinstance(result.get('files'),dict):
+                            files=validate_files(result['files'])
+                            report=qa(files)
+                            failures=[c['name'] for c in report['checks'] if not c['passed']]
+                            if failures and attempt==0:
+                                original_issues=failures
+                                user += '\nFix these static QA issues in the full output: '+', '.join(failures)
+                                yield event('step',step='Repairing',message='Static checks found issues. Requesting one correction.'); continue
+                            if failures: raise ValueError('Static validation failed after one repair attempt')
+                            yield event('step',step='Styling',message='Validating responsive HTML, CSS and JavaScript files.')
+                            snapshot(pid,files,'AI build' if mode=='build' else 'AI edit')
+                            summary=str(result.get('summary','Website files generated.'))[:1000]
+                        elif mode=='build':
                             if not result.get('headline') or not isinstance(result.get('services'),list): raise ValueError('Missing plan fields')
                             result['language']=body.language if body.language in ('en','fr','ar') else 'en'
                             yield event('step',step='Designing',message='Lina is assembling the visual direction.')
@@ -304,13 +300,16 @@ async def generate(pid:str,body:Generate):
                             snapshot(pid,files,'AI edit'); summary=str(result.get('summary','Changes applied.'))[:1000]
                         else:
                             report={}; summary=json.dumps(result,ensure_ascii=False,indent=2)[:12000]
+                        if i and not body.image:
+                            from .ai_hub import choose
+                            choose(provider,model)
                         save_message(pid,'assistant',summary)
                         elapsed=max(time.monotonic()-begin,0.01)
-                        yield event('done',summary=summary,report=report,provider=provider,model=model,elapsed=round(time.monotonic()-start,1),characters_per_second=round(len(raw)/elapsed,1))
+                        yield event('done',summary=summary,report=report,fixed_issues=len(original_issues),files=files if mode!='marketing' else None,fallback=bool(i),provider=provider,model=model,elapsed=round(time.monotonic()-start,1),characters_per_second=round(len(raw)/elapsed,1))
                         return
                     except asyncio.CancelledError: raise
                     except (json.JSONDecodeError,ValueError) as e:
-                        if attempt<2:
+                        if attempt<1:
                             yield event('step',step='Repairing',message='Invalid response; asking for valid JSON again.'); continue
                         errors.append('Invalid model response'); break
                     except Exception:
@@ -320,7 +319,16 @@ async def generate(pid:str,body:Generate):
     return StreamingResponse(stream(),media_type='text/event-stream',headers={'Cache-Control':'no-cache','X-Accel-Buffering':'no'})
 
 def qa(files):
-    s=files.get('index.html',''); css=files.get('styles.css',''); checks=[
+    from html.parser import HTMLParser
+    class Structure(HTMLParser):
+        def __init__(self): super().__init__(); self.tags=set(); self.doctype=False
+        def handle_starttag(self,tag,attrs): self.tags.add(tag)
+        def handle_decl(self,decl): self.doctype=decl.lower()=='doctype html'
+    s=files.get('index.html',''); css=files.get('styles.css','')
+    parser=Structure()
+    try: parser.feed(s);parser.close();parsed=parser.doctype and {'html','head','body','main'}.issubset(parser.tags)
+    except Exception: parsed=False
+    checks=[('HTML5 document structure',parsed),
       ('One main heading',len(re.findall(r'<h1\b',s,re.I))==1),('Page title',bool(re.search(r'<title>.+?</title>',s,re.I|re.S))),
       ('Meta description','name="description"' in s),('Viewport', 'name="viewport"' in s),('Responsive styles','@media' in css),
       ('Visible focus styles',':focus-visible' in css),('No lorem ipsum or TODO',not re.search(r'lorem ipsum|\bTODO\b',s,re.I)),

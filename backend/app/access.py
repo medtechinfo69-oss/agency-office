@@ -59,10 +59,16 @@ class OwnerAccess:
         return _encode(hmac.new(key, payload.encode(), hashlib.sha256).digest())
 
     def issue(self, kind: str, seconds: int, uid: str = 'owner') -> str:
+        if self.managed and kind == 'session':
+            from .admin_extended import policy
+            seconds = policy()['session_minutes'] * 60
         data = {"kind": kind, "exp": time.time() + seconds, "nonce": secrets.token_urlsafe(16)}
         if self.managed:
             from .admin import version
             data.update(uid=uid, ver=version(uid))
+            if kind == 'session':
+                from . import db
+                db.execute('INSERT INTO account_sessions(id,uid,created,expires,last_seen) VALUES(?,?,?,?,?)',(data['nonce'],uid,time.time(),data['exp'],time.time()))
         payload = _encode(json.dumps(data).encode())
         return payload + "." + self._signature(payload)
 
@@ -78,6 +84,11 @@ class OwnerAccess:
             if valid and self.managed:
                 from .admin import version
                 valid = data.get('ver', 0) == version(data.get('uid', 'owner')) and data.get('ver', 0) >= 0
+            if valid and self.managed and kind == 'session':
+                from . import db
+                row=db.one('SELECT revoked FROM account_sessions WHERE id=? AND uid=?',(data['nonce'],data.get('uid','owner')))
+                valid=bool(row and not row['revoked'])
+                if valid: db.execute('UPDATE account_sessions SET last_seen=? WHERE id=? AND last_seen<?',(time.time(),data['nonce'],time.time()-300))
             return valid
         except (ValueError, TypeError, KeyError, UnicodeError):
             return False
@@ -151,13 +162,22 @@ class OwnerAccessMiddleware:
                 if row: identity = admin.public_user(row)
             if identity is None:
                 return await JSONResponse({'detail': 'Sign in to access your agency.'}, status_code=401)(scope, receive, private_send)
+            from .admin_extended import policy
+            allowed = policy().get('allowed_ips', [])
+            if allowed:
+                import ipaddress
+                ip = connection.headers.get('x-vercel-forwarded-for','').split(',')[0].strip() if os.getenv('VERCEL') == '1' else connection.client.host
+                try: permitted_ip = any(ipaddress.ip_address(ip) in ipaddress.ip_network(n,strict=False) for n in allowed)
+                except ValueError: permitted_ip = False
+                if not permitted_ip: return await JSONResponse({'detail':'This connection is outside the allowed IP ranges.'},status_code=403)(scope,receive,private_send)
             scope.setdefault('state', {})['identity'] = identity
             path = scope['path']
             own_account = path.startswith('/api/admin/me') or path.startswith('/api/auth/')
             write = scope.get('method') not in ('GET', 'HEAD', 'OPTIONS')
             # Model discovery is a read capability despite its POST body.
             if path.startswith('/api/providers/') and path.endswith('/models'): write = False
-            if not own_account and not admin.permits(identity, admin.resource(path), write):
+            action = {'POST':'create','PUT':'edit','PATCH':'edit','DELETE':'delete'}.get(scope.get('method'), 'read') if write else 'read'
+            if not own_account and not admin.permits(identity, admin.resource(path), write, action=action):
                 return await JSONResponse({'detail': 'Your role does not allow this action.'}, status_code=403)(scope, receive, private_send)
         await self.app(scope, receive, private_send)
 
@@ -170,6 +190,7 @@ class InviteAccept(BaseModel):
 class SignIn(BaseModel):
     password: str = Field(min_length=1, max_length=1024)
     email: str = Field(default="", max_length=254)
+    otp: str = Field(default="", max_length=100)
 
 
 def auth_router(access: OwnerAccess) -> APIRouter:
@@ -197,9 +218,17 @@ def auth_router(access: OwnerAccess) -> APIRouter:
         if not valid:
             access.failures[ip].append(time.monotonic())
             raise HTTPException(401, "Incorrect password. Try again.")
+        if access.managed:
+            from .account_security import verify
+            if not verify(uid,body.otp):
+                access.failures[ip].append(time.monotonic())
+                raise HTTPException(401,'Enter a current authenticator code or an unused recovery code.')
         access.failures.pop(ip, None)
+        if access.managed:
+            from . import db
+            db.kv_set('last_login_'+uid,str(time.time()))
         response = JSONResponse({"authenticated": True})
-        response.set_cookie(COOKIE, access.issue("session", SESSION_SECONDS, uid=uid), max_age=SESSION_SECONDS,
+        response.set_cookie(COOKIE, access.issue("session", SESSION_SECONDS, uid=uid), max_age=(__import__('app.admin_extended',fromlist=['policy']).policy()['session_minutes']*60 if access.managed else SESSION_SECONDS),
                             httponly=True, secure=access.production, samesite="lax", path="/")
         return response
 
@@ -209,7 +238,11 @@ def auth_router(access: OwnerAccess) -> APIRouter:
         return accept_invite(body)
 
     @router.post("/api/auth/logout")
-    def logout():
+    def logout(request: Request):
+        if access.managed:
+            from .account_security import session_id
+            from . import db
+            db.execute('UPDATE account_sessions SET revoked=1 WHERE id=?',(session_id(request.cookies.get(COOKIE,'')),))
         response = Response(status_code=204)
         response.delete_cookie(COOKIE, path="/", secure=access.production, httponly=True, samesite="lax")
         return response

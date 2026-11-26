@@ -17,12 +17,15 @@ class CoreTests(unittest.TestCase):
         with self.assertRaises(ValueError): validate_files({'index.html':'<script src="https://bad.example/x.js"></script>'})
     def test_oversize(self):
         with self.assertRaises(ValueError): validate_files({'index.html':'x'*250001})
-    def test_router_falls_back_to_configured_providers(self):
-        with patch.object(main, 'get_setting', side_effect=lambda key,default='': {'provider':'ollama','model':'small'}.get(key,default)), patch.object(main, 'provider_key', side_effect=lambda provider: 'test-placeholder' if provider == 'openrouter' else ''):
-            choices=main.candidates()
-            self.assertEqual(choices[0],('ollama','small'))
-            self.assertIn(('openrouter',main.DEFAULT_CLOUD['openrouter']),choices)
-            self.assertNotIn('test-placeholder',repr(choices))
+    def test_router_uses_shared_global_provider_chain(self):
+        from app.provider import ProviderConfig
+        configured=[ProviderConfig(key='ollama',label='Local',base_url='http://localhost:11434/v1',token='server-only',model='small'), ProviderConfig(key='openrouter',label='Cloud',base_url='https://openrouter.ai/api/v1',token='server-only',model='next:free')]
+        with patch('app.provider.configured_configs',return_value=configured):
+            self.assertEqual(main.candidates(), [('ollama','small'),('openrouter','next:free')])
+            self.assertNotIn('server-only',repr(main.candidates()))
+    def test_static_qa_requires_parsed_html5_structure(self):
+        result=qa({'index.html':'<!-- <!doctype html><html><head><body><main> -->'})
+        self.assertFalse(next(c['passed'] for c in result['checks'] if c['name']=='HTML5 document structure'))
     def test_builder(self):
         f=render_site({'business':'<script>x</script>','headline':'Hello','services':[],'faq':[]})
         self.assertEqual(set(f),ALLOWED);validate_files(f);self.assertNotIn('<script>x</script>',f['index.html']);self.assertTrue(all(c['passed'] for c in qa(f)['checks']))

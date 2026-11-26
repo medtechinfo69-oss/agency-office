@@ -14,6 +14,7 @@ export default function AuthGate() {
   })
   const [inviteDone, setInviteDone] = useState(false)
   const [password, setPassword] = useState('')
+  const [otp, setOtp] = useState('')
   const [busy, setBusy] = useState(false)
   const [retry, setRetry] = useState(0)
 
@@ -41,11 +42,11 @@ export default function AuthGate() {
     setBusy(true); setError('')
     try {
       const response = await fetch('/api/auth/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, email }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password, email, otp }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.detail || 'Sign-in failed. Try again.')
-      setPassword(''); setSession({ required: true, authenticated: true })
+      setPassword(''); setOtp(''); setSession({ required: true, authenticated: true })
     } catch (e) { setError(e.message) }
     finally { setBusy(false) }
   }
@@ -84,6 +85,7 @@ export default function AuthGate() {
         <label className="field" htmlFor="owner-password">Workspace password
           <input id="owner-password" type="password" autoComplete="current-password" required autoFocus value={password} onChange={(event) => setPassword(event.target.value)} />
         </label>
+        <label className="field">Authenticator or recovery code (if enabled)<input autoComplete="one-time-code" value={otp} maxLength={100} onChange={e => setOtp(e.target.value)} /></label>
         <button className="btn primary" type="submit" disabled={busy || !password} aria-busy={busy}><LockKeyhole size={16} />{busy ? 'Signing in…' : 'Sign in'}</button>
         <p className="field-help">Owner: use your existing workspace password. Invited members: enter your email and personal password.</p>
       </form> : error ? <button className="btn" onClick={() => setRetry((n) => n + 1)}><RefreshCw size={16} /> Retry connection</button>

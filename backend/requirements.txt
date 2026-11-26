@@ -9,3 +9,6 @@ pytest-asyncio>=0.24.0
 
 # Supabase Postgres (server-side only)
 psycopg[binary]>=3.2,<4
+
+# Authenticated server-side credential encryption
+cryptography>=44,<47

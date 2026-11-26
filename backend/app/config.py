@@ -33,6 +33,8 @@ def _env(key: str, default: str = "") -> str:
 AUTO_IMAGE_MODEL = "pollinations-free"
 
 PROVIDER_PRESETS: dict[str, dict] = {
+    "ollama_cloud": {"label": "Ollama Cloud", "base_url": "https://ollama.com/api", "model": "", "site": "https://ollama.com", "headers": {}, "free": False},
+    "arena": {"label": "Arena", "base_url": "https://platform.arena.ai/v1", "model": "", "site": "https://platform.arena.ai", "headers": {}, "free": False},
     "openrouter": {
         "label": "OpenRouter",
         "base_url": "https://openrouter.ai/api/v1",
@@ -171,7 +173,8 @@ def _seed_provider_creds(s: "Settings") -> None:
     creds: dict[str, dict] = {}
     for key, p in PROVIDER_PRESETS.items():
         ku = key.upper()
-        token = _env(f"{ku}_TOKEN") or _env(f"{ku}_API_TOKEN")
+        token = _env(f"{ku}_API_KEY") or _env(f"{ku}_TOKEN") or _env(f"{ku}_API_TOKEN")
+        if key == "ollama_cloud": token = token or _env("OLLAMA_API_KEY")
         model = _env(f"{ku}_MODEL")
         base = _env(f"{ku}_BASE_URL")
         creds[key] = {

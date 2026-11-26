@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .. import agents as agentreg
 from .. import compliance, db, exporter, orchestration as orch, trends
@@ -82,6 +82,8 @@ def _providers_payload() -> list[dict]:
             "site": preset.get("site", ""),
             "free": bool(preset.get("free")),
             "token_set": bool(creds.get("token")) or key == "ollama",
+            "last4": (creds.get("token") or "")[-4:],
+            "disconnected": db.kv_get("disconnected_" + key) == "1",
             "active": settings.active_provider == key,
             "image_model": creds.get("image_model")
                            or db.kv_get(f"image_{key}", "") or "",
@@ -91,11 +93,11 @@ def _providers_payload() -> list[dict]:
 
 
 class ProviderIn(BaseModel):
-    provider: str
-    token: Optional[str] = None
-    model: Optional[str] = None
-    base_url: Optional[str] = None
-    image_model: Optional[str] = None
+    provider: str = Field(max_length=40)
+    token: Optional[str] = Field(default=None,max_length=4096)
+    model: Optional[str] = Field(default=None,max_length=200)
+    base_url: Optional[str] = Field(default=None,max_length=500)
+    image_model: Optional[str] = Field(default=None,max_length=200)
 
 
 @router.get("/providers")
@@ -108,6 +110,9 @@ def save_provider(body: ProviderIn) -> list[dict]:
     from ..config import PROVIDER_PRESETS
     if body.provider not in PROVIDER_PRESETS:
         raise HTTPException(400, "unknown provider")
+    if body.base_url:
+        from ..ai_hub import validate_endpoint
+        validate_endpoint(body.base_url.strip(),local=body.provider=='ollama')
     creds = settings.provider_creds.setdefault(body.provider, {})
     preset = PROVIDER_PRESETS[body.provider]
     if body.token is not None:
@@ -122,7 +127,8 @@ def save_provider(body: ProviderIn) -> list[dict]:
         creds["model"] = body.model.strip()
         db.kv_set(f"model_{body.provider}", creds["model"])
     if body.base_url is not None and body.base_url.strip():
-        creds["base_url"] = body.base_url.strip().rstrip("/")
+        from ..ai_hub import validate_endpoint
+        creds["base_url"] = validate_endpoint(body.base_url.strip(), local=body.provider == "ollama")
         db.kv_set(f"base_{body.provider}", creds["base_url"])
     if body.image_model is not None:
         img = body.image_model.strip()
@@ -153,6 +159,7 @@ def activate_provider(body: ActivateIn) -> list[dict]:
     from ..config import PROVIDER_PRESETS
     if body.provider not in PROVIDER_PRESETS:
         raise HTTPException(400, "unknown provider")
+    db.kv_set("disconnected_" + body.provider, "0")
     settings.active_provider = body.provider
     db.kv_set("active_provider", body.provider)
     creds = (settings.provider_creds or {}).get(body.provider) or {}
@@ -164,7 +171,7 @@ def activate_provider(body: ActivateIn) -> list[dict]:
     # choice, else the preset default, else the keyless auto backend
     from ..config import AUTO_IMAGE_MODEL
     img = (creds.get("image_model") or db.kv_get(f"image_{body.provider}", "")
-           or preset.get("image_model") or AUTO_IMAGE_MODEL)
+           or db.kv_get("image_model", "") or preset.get("image_model") or AUTO_IMAGE_MODEL)
     creds["image_model"] = img
     settings.image_model = img
     db.kv_set("image_model", img)
@@ -183,8 +190,8 @@ def activate_provider(body: ActivateIn) -> list[dict]:
 
 
 class ModelsIn(BaseModel):
-    token: Optional[str] = None
-    base_url: Optional[str] = None
+    token: Optional[str] = Field(default=None,max_length=4096)
+    base_url: Optional[str] = Field(default=None,max_length=500)
 
 
 @router.post("/providers/{key}/models")
@@ -207,8 +214,15 @@ async def provider_models(key: str, body: ModelsIn, request: Request) -> dict:
     saved_base = (creds.get('base_url') or preset['base_url']).strip().rstrip('/')
     if identity and not admin.permits(identity, 'connections', True) and (base != saved_base or body.token):
         raise HTTPException(403, 'Manage connections permission is required to test edited credentials or endpoints.')
+    from ..ai_hub import validate_endpoint
+    validate_endpoint(base, local=key == "ollama", resolve=True)
     token = (body.token or creds.get("token") or "").strip()
-    return await fetch_models(key, base, token)
+    result = await fetch_models(key, base, token)
+    from ..ai_hub import tags
+    for item in result.get('models', []): item['tags'] = tags(item, key)
+    result.update(provider=key, label=preset['label'], checked_at=__import__('time').time())
+    db.kv_set('catalog_'+key, json.dumps(result))
+    return result
 
 
 # ----------------------------------------------------------------- settings
@@ -298,13 +312,13 @@ def get_agents() -> list[dict]:
 
 class AgentIn(BaseModel):
     id: Optional[str] = None
-    name: str
-    role: str
-    personality: str = ""
-    system_prompt: str = ""
+    name: str = Field(min_length=1,max_length=100)
+    role: str = Field(min_length=1,max_length=200)
+    personality: str = Field(default="",max_length=2000)
+    system_prompt: str = Field(default="",max_length=20000)
     skills: list[str] = []
     color: str = "#2dd4bf"
-    strictness: int = 3
+    strictness: int = Field(default=3,ge=1,le=5)
     avatar: dict = {}
 
 

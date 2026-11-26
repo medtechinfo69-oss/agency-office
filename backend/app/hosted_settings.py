@@ -5,9 +5,9 @@ from .config import settings, PROVIDER_PRESETS
 
 
 def refresh():
-    if os.getenv('VERCEL') != '1': return
     from . import db
-    saved = {row['key']: row['value'] for row in db.query('SELECT key,value FROM settings_kv')}
+    from .vault import decrypt, sensitive
+    saved = {row['key']: decrypt(row['value']) if sensitive(row['key']) else row['value'] for row in db.query('SELECT key,value FROM settings_kv')}
     for key in PROVIDER_PRESETS:
         creds = settings.provider_creds.setdefault(key, {})
         for prefix, field in [('token', 'token'), ('model', 'model'), ('base', 'base_url'), ('image', 'image_model')]:

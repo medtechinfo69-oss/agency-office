@@ -9,7 +9,9 @@ import contextlib
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse
@@ -24,9 +26,18 @@ from .routers import api
 from . import sitebuilder
 
 app = FastAPI(title="AGENCY OFFICE", version="1.0.0")
+@app.exception_handler(RequestValidationError)
+async def invalid_input(request: Request, error: RequestValidationError):
+    # Pydantic's default error payload includes the original input. Never echo
+    # passwords, reference images or provider credentials in a validation error.
+    return JSONResponse({'detail':[{'loc':e['loc'],'msg':e['msg'],'type':e['type']} for e in error.errors()]},status_code=422)
+
+
 access = OwnerAccess.from_env()
 app.state.owner_access = access
 app.add_middleware(OwnerAccessMiddleware, access=access)
+from .guardrails import RequestGuard
+app.add_middleware(RequestGuard)
 app.include_router(auth_router(access))
 
 app.add_middleware(
@@ -40,7 +51,13 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 from . import admin
 app.include_router(admin.router)
+from .admin_extended import router as extended_router
+app.include_router(extended_router)
+from .account_security import router as security_router
+app.include_router(security_router)
 app.include_router(api.router)
+from .ai_hub import router as ai_router
+app.include_router(ai_router)
 from .cloud import router as cloud_router
 app.include_router(cloud_router)
 app.include_router(sitebuilder.router, prefix="/api/sitebuilder", tags=["site builder"])
@@ -86,6 +103,9 @@ async def ws_endpoint(ws: WebSocket) -> None:
 @app.on_event("startup")
 async def on_startup() -> None:
     try:
+        from . import vault, guardrails
+        guardrails.initialize()
+        vault.migrate()
         admin.initialize()
         if os.getenv('VERCEL') == '1': sitebuilder.init()
         await initialize_office()

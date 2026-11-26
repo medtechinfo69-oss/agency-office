@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Check, ChevronRight, CircleDashed, Inbox, LoaderCircle, X } from 'lucide-react'
 
 export function Button({ children, variant = 'secondary', busy = false, onClick, ...props }) {
-  return <button type="button" {...props} className={`a-button a-${variant} ${props.className || ''}`} disabled={props.disabled || busy} aria-busy={busy} onClick={onClick}>{busy && <LoaderCircle className="a-spin" size={16} />}{children}</button>
+  return <button type="button" {...props} className={`a-button a-${variant} ${props.className || ''}`} title={props.title || (props.disabled ? 'Complete the required fields or obtain permission to use this action.' : undefined)} disabled={props.disabled || busy} aria-busy={busy} onClick={onClick}>{busy && <LoaderCircle className="a-spin" size={16} />}{children}</button>
 }
 export function Action({ children, onClick, onError, success, notify, ...props }) {
   const [busy, setBusy] = useState(false)
