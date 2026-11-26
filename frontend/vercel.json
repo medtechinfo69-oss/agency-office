@@ -7,11 +7,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://agency-office-production-c80c7cdd.up.railway.app/api/:path*"
+      "destination": "https://backend-five-gamma-46.vercel.app/api/:path*"
     },
     {
       "source": "/media/:path*",
-      "destination": "https://agency-office-production-c80c7cdd.up.railway.app/media/:path*"
+      "destination": "https://backend-five-gamma-46.vercel.app/media/:path*"
     }
   ],
   "headers": [

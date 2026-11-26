@@ -31,10 +31,17 @@ class ClosingConnection(sqlite3.Connection):
         finally: self.close()
 
 def db():
+    if os.getenv('DATABASE_URL'):
+        from .postgres import Connection
+        return Connection('agency_sitebuilder', transactional=True)
+    if os.getenv('VERCEL') == '1':
+        raise RuntimeError('Vercel requires DATABASE_URL for durable Site Builder storage.')
     c=sqlite3.connect(DB,timeout=20,factory=ClosingConnection); c.row_factory=sqlite3.Row; return c
 
 def init():
     with db() as c:
+        if os.getenv('DATABASE_URL'):
+            c.execute("SELECT pg_advisory_xact_lock(hashtext('agency_sitebuilder_init'))")
         c.executescript('''CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY,name TEXT NOT NULL,brief TEXT NOT NULL,files TEXT NOT NULL,created REAL NOT NULL,updated REAL NOT NULL); CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY AUTOINCREMENT,project_id TEXT NOT NULL,role TEXT NOT NULL,content TEXT NOT NULL,created REAL NOT NULL); CREATE TABLE IF NOT EXISTS versions(id INTEGER PRIMARY KEY AUTOINCREMENT,project_id TEXT NOT NULL,label TEXT NOT NULL,files TEXT NOT NULL,created REAL NOT NULL); CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);''')
         if not c.execute('SELECT 1 FROM projects LIMIT 1').fetchone():
             plan={'business':'Northstar Insurance','headline':'Confidence for the road ahead.','subheadline':'Insurance guidance built around you, your family, and the things that matter most.','cta':'Explore coverage','primary_color':'#386e60','about':'Clear answers. Thoughtful guidance. A more confident way forward.','seo_description':'Explore insurance guidance with Northstar Insurance.','services':[{'title':'Personal coverage','description':'Explore options for the people and belongings that matter to you.'},{'title':'Business coverage','description':'Find coverage options that fit the way you work.'},{'title':'Helpful guidance','description':'Start a conversation about your individual needs.'}],'faq':[{'question':'How do I get started?','answer':'Send us a message to discuss your coverage needs.'},{'question':'Which coverage is right for me?','answer':'Your needs are unique. Contact us to explore your options.'}],'contact_heading':'Let’s find your way forward.'}
@@ -215,15 +222,16 @@ def candidates():
     selected=get_setting('provider',os.getenv('PROVIDER','ollama')); model=get_setting('model',DEFAULT)
     out=[]
     if selected in PROVIDERS:
-        if selected=='ollama' or provider_key(selected): out.append((selected,model))
+        if (selected=='ollama' and os.getenv('VERCEL') != '1') or (selected!='ollama' and provider_key(selected)): out.append((selected,model))
     for k in ('ollama','openrouter','groq','gemini'):
         if k==selected: continue
-        if k=='ollama': out.append((k,DEFAULT))
+        if k=='ollama':
+            if os.getenv('VERCEL') != '1': out.append((k,DEFAULT))
         elif provider_key(k): out.append((k,DEFAULT_CLOUD[k]))
     return out
 
 async def model_reply(provider,model,system,user):
-    timeout=httpx.Timeout(900,connect=12)
+    timeout=httpx.Timeout(55 if os.getenv("VERCEL") == "1" else 900,connect=12)
     if provider=='ollama':
         old=get_setting('active_model','')
         async with httpx.AsyncClient(timeout=timeout) as client:

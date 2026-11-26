@@ -43,3 +43,13 @@ Remaining work before safely cutting over:
 7. Test all existing workflows and errors on a preview deployment, including long generations, tenant isolation and storage, before changing production routing.
 
 No promise of unlimited/always-on AI generation is made. Free-plan quotas, pauses and external model costs still apply. No paid Supabase resources or branching have been requested.
+
+## Update: private Python API persistence
+
+The newer Vercel backend adapter uses private `agency_office` and
+`agency_sitebuilder` Postgres schemas through a restricted server-only login.
+This is separate from the original public multi-user foundation described above.
+The original diagnostic still checks that foundation only, not the Python API or
+AI generation. See `DEPLOYMENT.md` for runtime configuration and the explicit
+browser-driven jobs/unattended scheduling limitations. Deployment and live
+verification must succeed before treating the app as connected.

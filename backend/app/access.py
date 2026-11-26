@@ -21,7 +21,7 @@ from starlette.requests import HTTPConnection
 
 COOKIE = "ao_session"
 SESSION_SECONDS = 12 * 60 * 60
-PUBLIC_PATHS = {"/healthz", "/api/auth/session", "/api/auth/login"}
+PUBLIC_PATHS = {"/", "/healthz", "/api/auth/session", "/api/auth/login"}
 
 
 def _encode(value: bytes) -> str:
@@ -47,7 +47,7 @@ class OwnerAccess:
     @classmethod
     def from_env(cls):
         return cls(
-            production=os.getenv("APP_ENV", "local").lower() == "production",
+            production=(os.getenv('VERCEL') == '1' or os.getenv("APP_ENV", "local").lower() == "production"),
             password=os.getenv("ACCESS_PASSWORD", ""),
             secret=os.getenv("SESSION_SECRET", ""),
             origins=tuple(x.strip().rstrip("/") for x in os.getenv("ALLOWED_ORIGINS", "").split(",") if x.strip()),

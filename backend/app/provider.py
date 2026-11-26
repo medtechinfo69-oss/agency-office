@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import random
 import re
 import time
@@ -93,6 +94,8 @@ class ProviderConfig:
 def active_config() -> Optional[ProviderConfig]:
     """Config of the currently active provider (None when no token anywhere)."""
     from .config import PROVIDER_PRESETS
+    from .hosted_settings import refresh
+    refresh()
     key = settings.active_provider
     creds = (settings.provider_creds or {}).get(key) or {}
     preset = PROVIDER_PRESETS.get(key, {})
@@ -707,6 +710,8 @@ def get_provider() -> BaseProvider:
         return DemoProvider()
     cfg = active_config()
     if cfg is None:
+        if os.getenv("VERCEL") == "1":
+            raise ProviderError("auth", "Add a cloud provider API key in Settings before starting AI work.")
         return DemoProvider()
     return OpenAIProvider(cfg)
 
@@ -716,6 +721,8 @@ _provider: Optional[BaseProvider] = None
 
 def provider() -> BaseProvider:
     global _provider
+    if os.getenv("VERCEL") == "1":
+        return get_provider()
     if _provider is None:
         _provider = get_provider()
     return _provider

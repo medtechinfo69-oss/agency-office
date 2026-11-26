@@ -12,7 +12,8 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+from .media import DurableMedia
 
 from . import agents as agentreg
 from . import db, scheduler
@@ -37,10 +38,23 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 app.include_router(api.router)
+from .cloud import router as cloud_router
+app.include_router(cloud_router)
 app.include_router(sitebuilder.router, prefix="/api/sitebuilder", tags=["site builder"])
 
 # generated images / logos / exports
-app.mount("/media", StaticFiles(directory=str(settings.media_dir)), name="media")
+app.mount("/media", DurableMedia(directory=str(settings.media_dir)), name="media")
+
+
+@app.get('/', response_class=HTMLResponse)
+def backend_status():
+    try:
+        db.one('SELECT 1')
+    except Exception:
+        return HTMLResponse('<h1>Agency Office API</h1><p>Database connection unavailable. Check the backend deployment logs.</p>', status_code=503)
+    mode = 'Supabase Postgres' if os.getenv('DATABASE_URL') else 'local SQLite'
+    return HTMLResponse('<h1>Agency Office API is running</h1><p>Database: ' + mode + '</p>'
+        '<p><a href="https://agency-office-indol.vercel.app/">Open Agency Office</a></p>')
 
 
 # ---------------------------------------------------------------- WebSocket
@@ -98,7 +112,8 @@ async def on_startup() -> None:
     agentreg.seed_agents()
     seed_templates()
     seed_prompts()
-    await scheduler.start()
+    if os.getenv('VERCEL') != '1':
+        await scheduler.start()
     bus.publish_sync("log", {"level": "success",
                              "text": "🏢 Agency office is open."})
 
@@ -130,7 +145,7 @@ def seed_templates() -> None:
          {"deliverables": ["design", "copy", "images", "campaign"]}),
     ]
     for tid, name, brief, meta in templates:
-        db.execute("INSERT INTO templates (id, name, brief, meta) VALUES (?,?,?,?)",
+        db.execute("INSERT INTO templates (id, name, brief, meta) VALUES (?,?,?,?) ON CONFLICT(id) DO NOTHING",
                    (tid, name, brief, db.jdump(meta)))
 
 
@@ -159,7 +174,7 @@ def seed_prompts() -> None:
     ]
     for pid, name, cat, content in prompts:
         db.execute("INSERT INTO agents_prompts (id, name, category, content, created_at) "
-                   "VALUES (?,?,?,?,?)", (pid, name, cat, content, db.now()))
+                   "VALUES (?,?,?,?,?) ON CONFLICT(id) DO NOTHING", (pid, name, cat, content, db.now()))
 
 
 # NOTE: no demo project is seeded — the app opens on an empty office and the

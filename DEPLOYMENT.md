@@ -151,3 +151,55 @@ node --test frontend/scripts/configure-hosting.test.mjs frontend/src/sitebuilder
 node frontend/tests/hosted-auth.cjs
 UI_AXE=1 node frontend/tests/ui-review.cjs
 ```
+
+## Vercel + Supabase (request-driven cloud mode)
+
+The current frontend rewrites `/api/*` and `/media/*` to
+`https://backend-five-gamma-46.vercel.app`. Deploy `backend/` as FastAPI,
+`frontend/` as Vite. Set frontend `VITE_EVENT_TRANSPORT=poll`; do not use a
+Railway WebSocket URL. Both projects must deploy the same reviewed commit.
+
+Backend environment (never commit values):
+- `DATABASE_URL`: Supabase transaction-pooler connection string, using the
+  restricted `agency_backend.<project-ref>` login, port 6543, database postgres,
+  TLS verification enabled. Psycopg prepared statements are disabled.
+- `APP_ENV=production`, `DEMO_MODE=false`, `ACCESS_PASSWORD` (16+ characters),
+  `SESSION_SECRET` (32+ characters), `ALLOWED_ORIGINS` (exact frontend HTTPS URLs).
+
+The backend initializes its tables in private `agency_office` and
+`agency_sitebuilder` schemas. These are **single-owner** schemas, not the earlier
+public RLS foundation. Grant the restricted backend role USAGE/CREATE on only
+these two schemas. Browser clients never receive the database connection string.
+The publishable Supabase browser key cannot replace DATABASE_URL.
+
+Office state, provider settings, approvals, events, Site Builder files/versions,
+and generated small media persist in Postgres. Media are private bytea records
+(maximum 10 MB per file), not public Storage objects. `/tmp` is scratch space only;
+export ZIPs are rebuilt from persistent data. Watch the Free database quota.
+Existing local SQLite data is **not automatically migrated**.
+
+### Important differences from a persistent worker
+
+Vercel does not host the app's WebSocket or perpetual scheduler. The browser polls
+events and advances one bounded planning/task step per request. **Keep the app
+open to advance jobs.** Plan and delivery approvals survive page refreshes.
+Interrupted or failed tasks require explicit Resume/guidance before retrying;
+provider calls are not guaranteed exactly once. Stop/pause prevents future steps,
+not an already-running external provider request. Enabling schedules returns 409;
+unattended daily work needs an external durable worker. The local/Docker runner
+retains its original scheduler and WebSocket implementation.
+
+Configure a cloud AI provider key in Settings before real generation. Ollama on
+your laptop cannot serve a Vercel function. No paid provider subscription, hosting
+upgrade, or card registration is performed by this code. Free hosting/provider
+quotas and time limits still apply. Long individual tasks can exceed Vercel's
+request budget; they block for explicit retry rather than silently finishing in
+background. Site Builder streams run within a single Vercel request.
+
+### Regression checks
+
+`cd backend && .venv/bin/python -m pytest -q` covers auth, provider behavior,
+checkpoint approvals/dependencies/leases/retry/control, and adapter SQL handling.
+For disposable local Postgres only, set `TEST_POSTGRES_URL` and run
+`tests/test_postgres.py` to verify schema initialization, persistence, binary data,
+Unicode/bound parameters, and Site Builder. Never point that test at production.

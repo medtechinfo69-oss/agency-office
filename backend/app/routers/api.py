@@ -66,6 +66,8 @@ def health() -> dict:
 
 # ------------------------------------------------------------- providers
 def _providers_payload() -> list[dict]:
+    from ..hosted_settings import refresh
+    refresh()
     from ..config import PROVIDER_PRESETS
     out = []
     for key, preset in PROVIDER_PRESETS.items():
@@ -420,6 +422,11 @@ async def boss_chat(pid: str, body: ChatIn) -> dict:
     msg = db.add_message(text, channel="boss", project_id=pid)
     bus.publish_sync("message", msg, pid)
 
+    from .. import cloud
+    if cloud.enabled():
+        cloud.enqueue(pid, text)
+        return {'ok': True, 'message': msg, 'queued': True}
+
     proj = db.one("SELECT status FROM projects WHERE id=?", (pid,))
     status = proj["status"] if proj else "planning"
 
@@ -495,6 +502,10 @@ class ControlIn(BaseModel):
 def control(pid: str, body: ControlIn) -> dict:
     _project_or_404(pid)
     a = body.action
+    from .. import cloud
+    if cloud.enabled():
+        if a not in ('pause', 'resume', 'stop'): raise HTTPException(400, 'unknown action')
+        return {'ok': cloud.control(pid, a), 'action': a}
     if a == "pause":
         ok = orch.pause_run(pid)
     elif a == "resume":
@@ -515,6 +526,10 @@ class ApprovalIn(BaseModel):
 @router.post("/projects/{pid}/approve")
 def approve(pid: str, body: ApprovalIn) -> dict:
     _project_or_404(pid)
+    from .. import cloud
+    if cloud.enabled():
+        if body.kind not in ('plan', 'deliverable'): raise HTTPException(400, 'unknown kind')
+        return {'ok': cloud.approve(pid, body.kind, body.approved, body.comment)}
     if body.kind == "plan":
         ok = orch.approve_plan(pid, body.approved, body.comment)
     elif body.kind == "deliverable":
@@ -590,7 +605,12 @@ async def upload_logo(pid: str, file: UploadFile = File(...)) -> dict:
     dest = settings.media_dir / pid
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"logo{Path(file.filename or 'logo').suffix or '.png'}"
-    path.write_bytes(await file.read())
+    from ..media import MAX_FILE_BYTES, persist_file
+    content = await file.read(MAX_FILE_BYTES + 1)
+    if len(content) > MAX_FILE_BYTES:
+        raise HTTPException(413, 'Logo must be 10 MB or smaller.')
+    path.write_bytes(content)
+    persist_file(path)
     row = db.one("SELECT project_id FROM brand_kit WHERE project_id=?", (pid,))
     if row:
         db.execute("UPDATE brand_kit SET logo_path=? WHERE project_id=?", (str(path), pid))
@@ -809,6 +829,9 @@ def get_schedules(pid: str) -> list[dict]:
 @router.post("/projects/{pid}/schedules")
 def create_schedule(pid: str, body: ScheduleIn) -> dict:
     _project_or_404(pid)
+    from ..cloud import enabled
+    if enabled() and body.enabled:
+        raise HTTPException(409, 'Unattended schedules require a durable worker; this Vercel deployment only runs jobs while the office is open.')
     sid = db.new_id("sch")
     db.execute(
         "INSERT INTO schedules (id, name, kind, project_id, interval_hours, enabled, payload, created_at) "
@@ -828,6 +851,9 @@ def patch_schedule(sid: str, body: SchedulePatch) -> dict:
     row = db.one("SELECT * FROM schedules WHERE id=?", (sid,))
     if not row:
         raise HTTPException(404, "schedule not found")
+    from ..cloud import enabled
+    if enabled() and body.enabled:
+        raise HTTPException(409, 'Unattended schedules require a durable worker; this Vercel deployment only runs jobs while the office is open.')
     if body.enabled is not None:
         db.execute("UPDATE schedules SET enabled=? WHERE id=?", (1 if body.enabled else 0, sid))
     if body.interval_hours is not None:

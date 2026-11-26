@@ -181,7 +181,7 @@ def seed_agents() -> None:
         db.execute(
             """INSERT INTO agents (id, name, role, personality, system_prompt, skills, color,
                status, xp, level, strictness, avatar, custom, current_task)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,'')""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,'') ON CONFLICT(id) DO NOTHING""",
             (a["id"], a["name"], a["role"], a["personality"], a["prompt"],
              db.jdump(a["skills"]), a["color"], "idle",
              _starting_xp(a["id"]), _starting_level(a["id"]), a["strictness"],

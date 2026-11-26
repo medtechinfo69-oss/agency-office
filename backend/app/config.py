@@ -105,7 +105,7 @@ class Settings:
     # --- Server ---
     host: str = field(default_factory=lambda: _env("HOST", "0.0.0.0"))
     port: int = field(default_factory=lambda: int(_env("PORT", "8000")))
-    db_path: str = field(default_factory=lambda: _env("DB_PATH", "data/agency.db"))
+    db_path: str = field(default_factory=lambda: _env("DB_PATH", "/tmp/agency-office/agency.db" if os.getenv('VERCEL') == '1' else "data/agency.db"))
 
     # --- Provider resilience ---
     request_timeout: float = field(default_factory=lambda: float(_env("REQUEST_TIMEOUT_SECONDS", "60")))
@@ -145,7 +145,8 @@ class Settings:
 
     @property
     def data_dir(self) -> Path:
-        directory = Path(_env("DATA_DIR", str(Path(__file__).resolve().parents[1] / "data")))
+        default = '/tmp/agency-office' if os.getenv('VERCEL') == '1' else str(Path(__file__).resolve().parents[1] / 'data')
+        directory = Path(_env("DATA_DIR", default))
         directory.mkdir(parents=True, exist_ok=True)
         return directory
 

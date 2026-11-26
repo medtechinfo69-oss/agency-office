@@ -1,6 +1,8 @@
 import { authFetch } from './auth'
+import { connectPoll } from './poll'
 /* WebSocket client with auto-reconnect + event history replay handling. */
 export function connectWS(onEvent, onOpen, onClose) {
+  if (import.meta.env.VITE_EVENT_TRANSPORT === 'poll') return connectPoll(onEvent, onOpen, onClose)
   let ws = null
   let closed = false
   let retry = 0

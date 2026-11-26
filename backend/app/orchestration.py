@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import time
 import traceback
@@ -479,6 +480,10 @@ async def escalate(run: RunControl, task: dict, qa_notes: list) -> None:
     emit("log", {"level": "warn", "text": f"NORA escalated: {question[:140]}"}, pid)
     db.execute("UPDATE tasks SET status='blocked', updated_at=? WHERE id=?", (db.now(), task["id"]))
     emit("task", _task_row(task["id"]), pid)
+    # Serverless requests cannot wait for a human. The persisted cloud job
+    # remains blocked and the next Boss message supplies guidance/resumes it.
+    if os.getenv('VERCEL') == '1':
+        return
     # wait for boss reply (max 10 min, then mark blocked)
     try:
         reply = await asyncio.wait_for(run.boss_replies.get(), timeout=600)

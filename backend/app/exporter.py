@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 import zipfile
 from pathlib import Path
 from typing import Optional
@@ -65,9 +66,15 @@ def project_export_zip(project_id: str) -> Path:
         # images referenced anywhere in deliverables (and media dir)
         media = settings.media_dir / project_id
         seen = set()
+        if os.getenv('DATABASE_URL'):
+            for item in db.query('SELECT path, data FROM media_files WHERE path LIKE ?', (project_id + '/%',)):
+                name = Path(item['path']).name
+                if Path(name).suffix.lower() in ('.png', '.jpg', '.jpeg', '.svg', '.webp'):
+                    z.writestr(f'images/{name}', bytes(item['data']))
+                    seen.add(name)
         if media.exists():
             for p in sorted(media.rglob("*")):
-                if p.is_file() and p.suffix.lower() in (".png", ".jpg", ".jpeg", ".svg", ".webp"):
+                if p.is_file() and p.name not in seen and p.suffix.lower() in (".png", ".jpg", ".jpeg", ".svg", ".webp"):
                     z.write(p, f"images/{p.name}")
                     seen.add(p.name)
 

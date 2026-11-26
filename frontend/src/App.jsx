@@ -432,6 +432,9 @@ export default function App({ onLogout } = {}) {
       />
 
       <main id="main-content" tabIndex={-1} className={`workspace ${page === 'builder' ? 'builder-workspace' : ''}`}>
+        {import.meta.env.VITE_EVENT_TRANSPORT === 'poll' && (
+          <div className="feedback-banner" role="note">Cloud mode: keep this tab open to advance jobs. Scheduled runs are unavailable on this hosting setup. Add a cloud AI provider key in Settings to generate real content.</div>
+        )}
         {health?.demo && showDemoBanner && (
           <div className="demo-banner">
             {health.demo_reason === 'billing'

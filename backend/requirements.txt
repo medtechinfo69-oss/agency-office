@@ -6,3 +6,6 @@ python-multipart>=0.0.12
 python-dotenv>=1.0.0
 pytest>=8.0.0
 pytest-asyncio>=0.24.0
+
+# Supabase Postgres (server-side only)
+psycopg[binary]>=3.2,<4
