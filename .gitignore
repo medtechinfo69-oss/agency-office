@@ -1,0 +1,19 @@
+# Local configuration and user data
+.env
+backend/data/
+
+# Dependencies and generated frontend output
+frontend/node_modules/
+frontend/dist/
+backend/.venv/
+
+# Python and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Temporary and diagnostic files
+*.log
+*.tmp
+screenshot-*.png
+screenshots/
