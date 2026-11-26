@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Mapping
+from pathlib import Path
 
 SCHEMAS = {'agency_office', 'agency_sitebuilder'}
 
@@ -76,7 +76,15 @@ class Connection:
         import psycopg
         from psycopg.rows import dict_row
         self.schema, self.transactional = schema, transactional
-        self.raw = psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=10,
+        from psycopg.conninfo import conninfo_to_dict
+        options = conninfo_to_dict(os.environ['DATABASE_URL'])
+        if (options.get('host', '').endswith('.pooler.supabase.com')
+                and options.get('sslrootcert', 'system') == 'system'):
+            # Supabase's shared pooler uses its public private-root CA, not the
+            # OS trust store. Keep chain AND hostname verification enabled.
+            options.update(sslmode='verify-full', sslrootcert=str(
+                Path(__file__).resolve().parents[1] / 'certs' / 'supabase-root-2021.crt'))
+        self.raw = psycopg.connect(**options, connect_timeout=10,
             prepare_threshold=None, autocommit=not transactional, row_factory=dict_row)
 
     @property

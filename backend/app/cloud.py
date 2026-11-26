@@ -184,6 +184,11 @@ def events(after: int = Query(0, ge=0)):
         rows = list(reversed(db.query('SELECT id,payload FROM cloud_events ORDER BY id DESC LIMIT 100')))
     output = [db.jload(r['payload'], {}) for r in rows]
     if not after:
+        output = [event for event in output if event.get('type') not in ('approval_required', 'plan_ready', 'escalation')]
+    # Initial state comes from normal API reads; never replay stale UI snapshots.
+    if not after:
+        output = [event for event in output if event.get('type') not in ('task', 'project', 'progress', 'agent_state', 'cost', 'control')]
+    if not after:
         # Rehydrate human approval gates after a refresh, not only from events.
         for job in db.query("SELECT * FROM cloud_runs WHERE phase IN ('awaiting_plan','awaiting_delivery')"):
             plan = db.jload(job['plan'], {})

@@ -4,7 +4,7 @@
   "functions": {
     "index.py": {
       "maxDuration": 300,
-      "includeFiles": "prompts/**"
+      "includeFiles": "{prompts,certs}/**"
     }
   }
 }

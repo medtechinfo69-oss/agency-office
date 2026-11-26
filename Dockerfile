@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && mkdir -p /data && chown agency:agency /data
 COPY backend/app /app/backend/app
 COPY backend/prompts /app/backend/prompts
+COPY backend/certs /app/backend/certs
 COPY deploy/start_backend.py /app/start_backend.py
 WORKDIR /app/backend
 EXPOSE 10000
