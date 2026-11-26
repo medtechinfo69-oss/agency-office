@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Building2, LockKeyhole, RefreshCw } from 'lucide-react'
-import App from '../App'
+import SaaSEntry from './SaaSEntry'
 
 const SupabaseStatus = lazy(() => import('./SupabaseStatus'))
 
@@ -67,7 +67,7 @@ export default function AuthGate() {
     } catch (error) { setError(error.message) } finally { setBusy(false) }
   }}><label className="field">New password<input type="password" autoComplete="new-password" required minLength={16} value={password} onChange={(e) => setPassword(e.target.value)} /></label><p className="field-help">Use at least 16 characters.</p>{error && <div role="alert" className="feedback-banner error">{error}</div>}<button className="btn primary" disabled={busy || password.length < 16}>{busy ? 'Accepting…' : 'Accept invitation'}</button></form></section></main>
 
-  if (session?.authenticated) return <App onLogout={session.required ? logout : undefined} />
+  if (session?.authenticated) return <SaaSEntry onLogout={session.required ? logout : undefined} />
 
   return <main className="auth-screen">
     <section className="auth-card card" aria-labelledby="auth-title">

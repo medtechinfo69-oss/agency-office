@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, Request
+from fastapi import APIRouter, File, HTTPException, UploadFile, Request, Body
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -195,7 +195,7 @@ class ModelsIn(BaseModel):
 
 
 @router.post("/providers/{key}/models")
-async def provider_models(key: str, body: ModelsIn, request: Request) -> dict:
+async def provider_models(key: str, request: Request, body: ModelsIn = Body(default_factory=ModelsIn)) -> dict:
     """Validate an API key (typed now or already stored) and list its models.
     Used by the UI to auto-populate the model dropdowns. Never logs/echoes
     the token — only the result travels back."""

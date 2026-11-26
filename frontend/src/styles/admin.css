@@ -269,3 +269,6 @@ kbd { font:inherit;font-size:12px;padding:2px 4px;border:1px solid var(--border)
 
 /* Avatar actions must wrap inside the narrow account card. */
 .a-identity { flex-wrap:wrap; min-width:0; }
+
+.saas-code {white-space:pre-wrap;overflow-wrap:anywhere;max-height:480px;overflow:auto;font:12px/1.6 monospace;}
+.saas-topbar {padding:16px 24px;border-bottom:1px solid var(--border);}

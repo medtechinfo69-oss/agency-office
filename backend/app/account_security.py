@@ -97,6 +97,7 @@ def enable(body:OTP,request:Request):
 @router.post('/totp/disable')
 def disable(body:PasswordProof,request:Request):
     uid=prove(request,body)
+    if uid=='owner' and __import__('app.saas',fromlist=['mfa_enforced']).mfa_enforced():raise HTTPException(409,'Boss Admin two-factor authentication is mandatory and cannot be disabled.')
     if not verify(uid,body.otp):raise HTTPException(400,'Invalid or already used authenticator/recovery code.')
     db.execute('DELETE FROM account_security WHERE uid=?',(uid,))
     return {'ok':True}

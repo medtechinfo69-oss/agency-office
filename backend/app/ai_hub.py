@@ -79,8 +79,11 @@ async def discover(key):
     from .provider import fetch_models
     base, token, model = config(key)
     start=time.perf_counter()
-    if db.kv_get('disconnected_'+key) == '1': return {'valid':False,'models':[],'error':'Disconnected. Reconnect to test.'}
-    if key != 'ollama' and not token: return {'valid':False,'models':[],'error':'No server-side key configured.'}
+    unavailable = 'Disconnected. Reconnect to test.' if db.kv_get('disconnected_'+key)=='1' else 'No server-side key configured.' if key!='ollama' and not token else ''
+    if unavailable:
+        result={'provider':key,'label':PROVIDER_PRESETS[key]['label'],'valid':False,'models':[],'error':unavailable,'checked_at':time.time(),'latency_ms':0,'selected':model}
+        db.kv_set('catalog_'+key,json.dumps(result))
+        return result
     try:
         validate_endpoint(base, local=key=='ollama', resolve=True)
         result = await fetch_models(key, base, token)
@@ -164,6 +167,11 @@ async def complete(key, model, messages, image=None, json_output=False):
     validate_endpoint(base,local=key=='ollama',resolve=True)
     if db.kv_get('disconnected_'+key)=='1': raise ValueError('Provider disconnected')
     if key!='ollama' and not token: raise ValueError('No server-side credential')
+    if key=='anthropic':
+        if image:raise HTTPException(422,'Use the native text gateway for Claude; reference image conversion is not enabled.')
+        from .provider import OpenAIProvider,ProviderConfig
+        result=await OpenAIProvider(ProviderConfig(key,'Anthropic Claude',base,token,model)).chat(messages,max_tokens=6000,json_mode=json_output)
+        return result.text
     outgoing=[dict(m) for m in messages]
     if image:
         if not re.fullmatch(r'data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+',image): raise HTTPException(422,'Use a PNG, JPEG or WebP reference image up to 1 MB.')
@@ -184,6 +192,9 @@ async def complete(key, model, messages, image=None, json_output=False):
 
 
 async def stream_complete(key, model, messages, image=None):
+    if key=='anthropic':
+        yield await complete(key,model,messages,image,json_output=True)
+        return
     base,token,_=config(key)
     validate_endpoint(base,local=key=='ollama',resolve=True)
     if db.kv_get('disconnected_'+key)=='1' or (key!='ollama' and not token): raise ValueError('Provider unavailable')

@@ -15,6 +15,8 @@ PASSWORD = 'test-only-owner-password-1234'
 
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
+    monkeypatch.setenv('SAAS_ENFORCE_MFA','false')
+    monkeypatch.setenv('SAAS_MODE','false')
     monkeypatch.delenv('DATABASE_URL', raising=False)
     monkeypatch.delenv('VERCEL', raising=False)
     monkeypatch.setattr(settings, 'db_path', str(tmp_path / 'admin.db'))

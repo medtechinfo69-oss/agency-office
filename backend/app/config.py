@@ -33,6 +33,8 @@ def _env(key: str, default: str = "") -> str:
 AUTO_IMAGE_MODEL = "pollinations-free"
 
 PROVIDER_PRESETS: dict[str, dict] = {
+    "openai": {"label":"OpenAI", "base_url":"https://api.openai.com/v1", "model":"", "site":"https://platform.openai.com", "headers":{}, "free":False},
+    "anthropic": {"label":"Anthropic Claude", "base_url":"https://api.anthropic.com/v1", "model":"", "site":"https://console.anthropic.com", "headers":{}, "free":False},
     "ollama_cloud": {"label": "Ollama Cloud", "base_url": "https://ollama.com/api", "model": "", "site": "https://ollama.com", "headers": {}, "free": False},
     "arena": {"label": "Arena", "base_url": "https://platform.arena.ai/v1", "model": "", "site": "https://platform.arena.ai", "headers": {}, "free": False},
     "openrouter": {

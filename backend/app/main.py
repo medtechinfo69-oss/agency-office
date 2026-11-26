@@ -51,6 +51,11 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 from . import admin
 app.include_router(admin.router)
+from .saas import router as saas_router, ai_router as gateway_router
+app.include_router(saas_router)
+from .tenant_builder import router as tenant_builder_router
+app.include_router(tenant_builder_router)
+app.include_router(gateway_router)
 from .admin_extended import router as extended_router
 app.include_router(extended_router)
 from .account_security import router as security_router

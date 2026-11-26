@@ -58,14 +58,14 @@ class OwnerAccess:
         key = hashlib.sha256((self.secret + "\0" + self.password).encode()).digest()
         return _encode(hmac.new(key, payload.encode(), hashlib.sha256).digest())
 
-    def issue(self, kind: str, seconds: int, uid: str = 'owner') -> str:
+    def issue(self, kind: str, seconds: int, uid: str = 'owner', parent: str = '') -> str:
         if self.managed and kind == 'session':
             from .admin_extended import policy
             seconds = policy()['session_minutes'] * 60
         data = {"kind": kind, "exp": time.time() + seconds, "nonce": secrets.token_urlsafe(16)}
         if self.managed:
             from .admin import version
-            data.update(uid=uid, ver=version(uid))
+            data.update(uid=uid, ver=version(uid), parent=parent)
             if kind == 'session':
                 from . import db
                 db.execute('INSERT INTO account_sessions(id,uid,created,expires,last_seen) VALUES(?,?,?,?,?)',(data['nonce'],uid,time.time(),data['exp'],time.time()))
@@ -132,6 +132,14 @@ class OwnerAccessMiddleware:
                     from . import admin
                     data = json.loads(base64.urlsafe_b64decode(ticket.split('.')[0] + '=='))
                     member = admin.user(data.get('uid', 'owner'))
+                    from . import db
+                    from . import saas
+                    if member and member['id']=='owner':
+                        from .account_security import session_id
+                        if (saas.mfa_enforced() and not saas.mfa_ready('owner')) or db.one('SELECT session_id FROM saas_impersonations WHERE session_id=? AND expires>?',(data.get('parent',''),time.time())):
+                            return await send({'type':'websocket.close','code':1008})
+                    if member and db.one('SELECT uid FROM saas_members WHERE uid=?',(member['id'],)):
+                        return await send({'type':'websocket.close','code':1008})
                     if not member or not admin.permits(member, 'projects'):
                         return await send({"type": "websocket.close", "code": 1008})
             return await self.app(scope, receive, send)
@@ -143,7 +151,7 @@ class OwnerAccessMiddleware:
                 message = {**message, "headers": headers}
             await send(message)
 
-        if self.access.enabled and scope.get("method") not in {"GET", "HEAD", "OPTIONS"} and not self.access.origin_allowed(connection):
+        if self.access.enabled and scope.get("method") not in {"GET", "HEAD", "OPTIONS"} and (not self.access.origin_allowed(connection) or connection.headers.get('sec-fetch-site')=='cross-site'):
             return await JSONResponse({"detail": "This frontend origin is not allowed. Configure ALLOWED_ORIGINS on the backend."}, status_code=403)(scope, receive, private_send)
         if scope["path"] not in PUBLIC_PATHS and not (self.access.authenticated(connection) or (self.access.managed and connection.headers.get("authorization", "").startswith("Bearer ao_"))):
             return await JSONResponse({"detail": "Sign in to access your agency."}, status_code=401)(scope, receive, private_send)
@@ -172,6 +180,13 @@ class OwnerAccessMiddleware:
                 if not permitted_ip: return await JSONResponse({'detail':'This connection is outside the allowed IP ranges.'},status_code=403)(scope,receive,private_send)
             scope.setdefault('state', {})['identity'] = identity
             path = scope['path']
+            from . import saas
+            try:
+                handled = saas.authorize(connection, identity)
+            except HTTPException as error:
+                return await JSONResponse({'detail': error.detail}, status_code=error.status_code)(scope, receive, private_send)
+            if handled:
+                return await self.app(scope, receive, private_send)
             own_account = path.startswith('/api/admin/me') or path.startswith('/api/auth/')
             write = scope.get('method') not in ('GET', 'HEAD', 'OPTIONS')
             # Model discovery is a read capability despite its POST body.
@@ -227,6 +242,7 @@ def auth_router(access: OwnerAccess) -> APIRouter:
         if access.managed:
             from . import db
             db.kv_set('last_login_'+uid,str(time.time()))
+        if access.managed: request.scope.setdefault('state',{})['identity'] = __import__('app.admin',fromlist=['public_user']).public_user(__import__('app.admin',fromlist=['user']).user(uid))
         response = JSONResponse({"authenticated": True})
         response.set_cookie(COOKIE, access.issue("session", SESSION_SECONDS, uid=uid), max_age=(__import__('app.admin_extended',fromlist=['policy']).policy()['session_minutes']*60 if access.managed else SESSION_SECONDS),
                             httponly=True, secure=access.production, samesite="lax", path="/")
@@ -251,6 +267,6 @@ def auth_router(access: OwnerAccess) -> APIRouter:
     def websocket_ticket(request: Request):
         # Short-lived WS-only credential goes in the subprotocol, never a URL or localStorage.
         identity = getattr(request.state, 'identity', {})
-        return {"ticket": access.issue("ws", 30, uid=identity.get('id', 'owner')) if access.enabled else None}
+        return {"ticket": access.issue("ws", 30, uid=identity.get('id', 'owner'), parent=__import__('app.account_security',fromlist=['session_id']).session_id(request.cookies.get(COOKIE,''))) if access.enabled else None}
 
     return router

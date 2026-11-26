@@ -58,10 +58,10 @@ class RequestGuard:
                 if not consume('ip:' + ip, 1200): return await reject(429, 'Request limit reached. Retry in one minute.')
                 identity = headers.get(b'cookie', b'') + headers.get(b'authorization', b'')
                 actor = hashlib.sha256(identity).hexdigest() if identity else ip
-                expensive = path in ('/api/chat', '/api/image', '/api/models/benchmark') or path.endswith(('/generate', '/images', '/models'))
+                expensive = path.startswith('/api/ai') or path.endswith(('/delegate','/advance')) or path in ('/api/chat', '/api/image', '/api/models/benchmark') or path.endswith(('/generate', '/images', '/models'))
                 limit = 12 if '/auth/' in path and scope['method'] == 'POST' else 30 if expensive else 600
-                category = 'auth' if '/auth/' in path else 'ai' if expensive else 'api'
-                if category == 'auth': actor = ip
+                category = ('auth-write' if scope['method']=='POST' else 'auth-read') if '/auth/' in path else 'ai' if expensive else 'api'
+                if category.startswith('auth-'): actor = ip
                 if not consume(category + ':' + actor, limit): return await reject(429, 'Rate limit reached. Retry in one minute.')
             except Exception:
                 if path not in ('/', '/healthz'): return await reject(503, 'Request protection unavailable. Retry shortly.')
@@ -92,6 +92,10 @@ class RequestGuard:
                     identity = scope.get('state', {}).get('identity', {})
                     safe_path = path[:512]
                     db.execute('INSERT INTO audit_events(id,actor,method,path,status,created) VALUES(?,?,?,?,?,?)', (db.new_id('audit'), identity.get('id', 'anonymous'), scope['method'], safe_path, message['status'], time.time()))
+                    if identity.get('id'):
+                        from . import saas
+                        from starlette.requests import Request
+                        saas.audit(Request(scope),'http.'+scope['method'].lower(),identity.get('tenant_id',''),safe_path+' status='+str(message['status']))
                     # Bounded retention; requests, not an imaginary serverless cron.
                     db.execute('DELETE FROM audit_events WHERE created<?', (time.time()-int(json.loads(db.kv_get('instance_configuration','{"retention_days":30}')).get('retention_days',30))*86400,))
                 except Exception: pass  # Never turn a completed mutation into a failed response.

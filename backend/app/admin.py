@@ -36,6 +36,8 @@ def initialize():
     account_security.initialize()
     db.get_conn().executescript(SCHEMA)
     db.get_conn().commit()
+    from . import saas
+    saas.initialize()
     for role in ['Admin', 'Manager', 'Editor', 'Viewer']:
         permissions = {r: {'read': True, 'write': role == 'Admin' or (role == 'Editor' and r in ('projects', 'agents'))} for r in RESOURCES}
         db.execute('INSERT INTO admin_roles(id,permissions) VALUES(?,?) ON CONFLICT(id) DO NOTHING', (role, db.jdump(permissions)))

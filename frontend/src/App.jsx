@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { api } from './api'
 import { connectWS } from './ws'
 import { t as translate, dir } from './i18n'
+import PlatformPage, { PLATFORM_PAGES } from './pages/PlatformPage'
 import Sidebar, { NAV } from './components/Sidebar'
 import TopBar from './components/TopBar'
 import CommandCenter from './components/CommandCenter'
@@ -106,7 +107,7 @@ export default function App({ onLogout } = {}) {
     setProjects(list)
     if (!projectId && list.length) setProjectId(list[0].id)
     // first open with an empty office → straight into creating a real project
-    if (!list.length && !autoNewRef.current && !location.hash.startsWith('#settings')) {
+    if (!list.length && !autoNewRef.current && !location.hash.startsWith('#settings') && !location.hash.startsWith('#platform/')) {
       autoNewRef.current = true
       setModal('new')
     }
@@ -433,13 +434,13 @@ export default function App({ onLogout } = {}) {
   }
 
   /* page → title + question subtitle */
-  const adminSection = page === 'settings' ? 'connections' : page.startsWith('settings/') ? page.split('/')[1] : null
+  const adminSection = page === 'platform/providers' ? 'connections' : page === 'settings' ? 'connections' : page.startsWith('settings/') ? page.split('/')[1] : null
   const adminItem = ADMIN_PAGES.find((p) => p.id === adminSection)
   const navItem = NAV.find((n) => n.id === page) || NAV[0]
   const title = page === 'office'
     ? (project?.name || t('title'))
-    : adminItem ? adminItem.label : (t('nav.' + page) !== 'nav.' + page ? t('nav.' + page) : navItem.label)
-  const question = t('sub.' + page)
+    : page.startsWith('platform/') ? (PLATFORM_PAGES.find(p=>p[0]===page.split('/')[1])?.[1]||'Platform') : adminItem ? adminItem.label : (t('nav.' + page) !== 'nav.' + page ? t('nav.' + page) : navItem.label)
+  const question = page.startsWith('platform/')?'Platform management':t('sub.' + page)
 
   useEffect(() => {
     loadModels().catch(() => {})
@@ -532,6 +533,7 @@ export default function App({ onLogout } = {}) {
         {page === 'workflows' && <WorkflowsPage t={t} projects={projects} />}
         {page === 'skills' && <SkillsPage t={t} agents={agents} />}
         {page === 'logs' && <LogsPage t={t} log={log} onRefresh={() => loadLog(projectId)} />}
+        {page.startsWith('platform/') && page!=='platform/providers' && <PlatformPage key={page} section={page.split('/')[1]} notify={pushToast}/>}
         {page === 'permissions' && <PermissionsPage t={t} agents={agents} />}
         {page === 'health' && <SystemHealthPage t={t} health={health} />}
         {page === 'shop' && <ShopPage t={t} agents={agents} onRefresh={loadAgents} />}

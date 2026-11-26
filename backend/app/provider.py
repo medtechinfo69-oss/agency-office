@@ -193,6 +193,10 @@ async def fetch_models(key: str, base_url: str, token: str) -> dict:
     if token and key != "ollama":
         headers["Authorization"] = f"Bearer {token}"
     base = base_url.rstrip("/")
+    if key in ('openai','anthropic') and not base.endswith('/v1'): base += '/v1'
+    if key == 'anthropic':
+        headers.pop('Authorization',None)
+        headers.update({'x-api-key':token,'anthropic-version':'2023-06-01'})
     out: dict = {
         "valid": False, "error": "", "models": [], "free_count": 0,
         "images_api": bool(preset.get("images_api")),
@@ -211,14 +215,23 @@ async def fetch_models(key: str, base_url: str, token: str) -> dict:
                 response = await client.get(endpoint + '/api/tags', headers={'Authorization': 'Bearer ' + token} if token else {})
                 response.raise_for_status()
                 tags = response.json().get('models', [])
-                out['models'] = [{'id': item.get('name') or item.get('model'), 'free': True,
+                out['models'] = [{'id': item.get('name') or item.get('model'), 'free': key=='ollama',
                                   'size': item.get('size'), 'image': False} for item in tags if item.get('name') or item.get('model')]
                 out['valid'] = bool(out['models'])
-                out['free_count'] = len(out['models'])
+                out['free_count'] = len(out['models']) if key=='ollama' else 0
                 if not out['valid']: out['error'] = 'No installed Ollama models. Install a model on your runtime, then retry.'
                 return out
             except Exception:
-                out['error'] = 'Cannot discover Ollama models from /api/tags. Check the endpoint and runtime availability.'
+                if key=='ollama_cloud':
+                    try:
+                        response=await client.get(endpoint+'/v1/models')
+                        response.raise_for_status()
+                        entries=response.json().get('data',[])
+                        out['models']=[{'id':m['id'],'free':False,'image':False} for m in entries if m.get('id')]
+                        out['valid']=bool(out['models'])
+                        if out['valid']:return out
+                    except Exception:pass
+                out['error'] = 'Model discovery failed. Check the saved key, endpoint, provider access and quota. Local Ollama requires a reachable /api/tags endpoint.'
                 return out
 
         # 1) key validation — openrouter's /models is public, so check /key
@@ -296,6 +309,7 @@ class OpenAIProvider(BaseProvider):
         if self.cfg is None:
             raise ProviderError("bad_request", "no AI provider configured (no API token)")
         self.base = self.cfg.base_url.rstrip("/")
+        if self.cfg.key in ('openai','anthropic') and not self.base.endswith('/v1'):self.base += '/v1'
         # local CPU generations (Ollama) need the full local budget — the
         # outer asyncio wait_for(LOCAL_TIMEOUT) still caps the whole call
         self.timeout = (900.0 if self.cfg.key == "ollama"
@@ -310,6 +324,9 @@ class OpenAIProvider(BaseProvider):
         h = {"Content-Type": "application/json"}
         if self.cfg.token:
             h["Authorization"] = f"Bearer {self.cfg.token}"
+        if self.cfg.key=='anthropic':
+            h.pop('Authorization',None)
+            h.update({'x-api-key':self.cfg.token,'anthropic-version':'2023-06-01'})
         h.update(self.cfg.headers or {})
         return h
 
@@ -374,6 +391,12 @@ class OpenAIProvider(BaseProvider):
 
     async def chat(self, messages: list[dict], *, temperature: float = 0.4,
                    max_tokens: int = 2000, json_mode: bool = False) -> ChatResult:
+        if self.cfg.key == 'anthropic':
+            system='\n'.join(m['content'] for m in messages if m['role']=='system')
+            payload={'model':self.cfg.model,'max_tokens':max_tokens,'system':system,'messages':[m for m in messages if m['role']!='system']}
+            data=await self._request('POST','/messages',payload)
+            u=data.get('usage',{})
+            return ChatResult(''.join(b.get('text','') for b in data.get('content',[]) if b.get('type')=='text'),Usage(tokens_in=int(u.get('input_tokens',0)),tokens_out=int(u.get('output_tokens',0)),model=self.cfg.model),data)
         payload: dict[str, Any] = {
             "model": self.cfg.model,
             "messages": messages,

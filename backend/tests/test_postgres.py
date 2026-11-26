@@ -110,3 +110,27 @@ def test_guardrails_and_security_postgres(monkeypatch):
     assert access.valid(token,'session')
     db.execute('DELETE FROM request_limits')
     db._conn.close()
+
+
+@pytest.mark.skipif(not os.getenv('TEST_POSTGRES_URL'), reason='Requires disposable local PostgreSQL')
+def test_saas_additive_schema_and_atomic_admission(monkeypatch):
+    url=os.environ['TEST_POSTGRES_URL']
+    assert 'host=/tmp/' in url or '@localhost' in url or '@127.0.0.1' in url
+    monkeypatch.setenv('DATABASE_URL',url)
+    from app import db,saas,admin
+    monkeypatch.setattr(db,'_conn',None)
+    admin.initialize();saas.initialize()
+    tid=db.new_id('pg_saas')
+    import concurrent.futures,time
+    def admit(i):
+        with Connection('agency_office',transactional=True) as c:
+            c.execute('SELECT pg_advisory_xact_lock(hashtext(?))',('saas:'+tid,))
+            used=c.execute('SELECT count(*) AS n FROM saas_usage WHERE tenant_id=?',(tid,)).fetchone()['n']
+            if used:return False
+            c.execute("INSERT INTO saas_usage(id,tenant_id,user_id,agent_id,status,reserved_tokens,fingerprint,created) VALUES(?,?,?,'','pending',100,'fingerprint',?)",(tid+'_'+str(i),tid,'test',time.time()))
+            return True
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:result=list(pool.map(admit,range(4)))
+    assert sum(result)==1
+    saas.initialize()
+    assert db.one('SELECT count(*) AS n FROM saas_usage WHERE tenant_id=?',(tid,))['n']==1
+    db.execute('DELETE FROM saas_usage WHERE tenant_id=?',(tid,));db._conn.close()
