@@ -18,6 +18,7 @@ from urllib.parse import quote
 from . import db
 from .config import AUTO_IMAGE_MODEL, settings
 from .provider import ProviderError, provider
+from .media import persist_file, restore_file
 
 RATIOS = {"1:1": (1080, 1080), "4:5": (1080, 1350), "9:16": (1080, 1920)}
 
@@ -29,6 +30,8 @@ def _brand(project_id: str) -> tuple[list[str], str, Optional[str]]:
     colors = db.jload(row["colors"], []) or ["#0f172a", "#2dd4bf", "#f8fafc"]
     extra = db.jload(row["extra"], {}) or {}
     name = extra.get("name", "BRAND")
+    if row['logo_path']:
+        restore_file(Path(row['logo_path']))
     return colors, name, row["logo_path"]
 
 
@@ -118,6 +121,7 @@ async def generate_image(project_id: str, title: str, ratio: str = "1:1",
             ext = "png" if data[:8] == b"\x89PNG\r\n\x1a\n" else ("jpg" if data[:2] == b"\xff\xd8" else "png")
             path = out_dir / f"{safe}.{ext}"
             path.write_bytes(data)
+            persist_file(path)
             return {"path": str(path), "url": f"/media/{project_id}/{path.name}",
                     "source": "api", "model": settings.image_model}
         except Exception as e:
@@ -131,6 +135,7 @@ async def generate_image(project_id: str, title: str, ratio: str = "1:1",
             ext = "png" if data[:8] == b"\x89PNG\r\n\x1a\n" else "jpg"
             path = out_dir / f"{safe}.{ext}"
             path.write_bytes(data)
+            persist_file(path)
             return {"path": str(path), "url": f"/media/{project_id}/{path.name}",
                     "source": "api", "model": AUTO_IMAGE_MODEL}
         except Exception as e:
@@ -140,6 +145,7 @@ async def generate_image(project_id: str, title: str, ratio: str = "1:1",
     svg = _svg_placeholder(name, colors, title, ratio, logo, "creative")
     path = out_dir / f"{safe}.svg"
     path.write_text(svg, encoding="utf-8")
+    persist_file(path)
     out = {"path": str(path), "url": f"/media/{project_id}/{path.name}",
            "source": "placeholder_svg", "model": "local"}
     if note:

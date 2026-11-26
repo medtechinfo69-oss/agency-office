@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from collections import deque
 from typing import Any, Optional
@@ -22,7 +23,7 @@ class EventBus:
 
     # -- connections -------------------------------------------------------
     async def connect(self, ws: WebSocket) -> None:
-        await ws.accept()
+        await ws.accept(subprotocol="agency-office" if "agency-office" in ws.scope.get("subprotocols", []) else None)
         self._clients.add(ws)
         # replay recent history so a fresh page load catches up
         for ev in list(self._history)[-100:]:
@@ -43,6 +44,9 @@ class EventBus:
             "ts": time.time(),
         }
         self._history.append(event)
+        if os.getenv('VERCEL') == '1':
+            from . import db
+            db.execute('INSERT INTO cloud_events(payload, created_at) VALUES(?,?)', (db.jdump(event), time.time()))
         dead: list[WebSocket] = []
         payload = json.dumps(event, ensure_ascii=False, default=str)
         for ws in list(self._clients):
@@ -56,6 +60,11 @@ class EventBus:
 
     def publish_sync(self, etype: str, data: Optional[dict] = None, project_id: Optional[str] = None) -> None:
         """Fire-and-forget publish from sync code (schedules the coroutine)."""
+        if os.getenv('VERCEL') == '1':
+            from . import db
+            event = {'type': etype, 'project_id': project_id, 'data': data or {}, 'ts': time.time()}
+            db.execute('INSERT INTO cloud_events(payload, created_at) VALUES(?,?)', (db.jdump(event), time.time()))
+            return
         try:
             loop = asyncio.get_running_loop()
             loop.create_task(self.publish(etype, data, project_id))

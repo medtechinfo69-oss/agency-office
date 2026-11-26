@@ -1,12 +1,13 @@
 /* ============================================================
    AGENCY OFFICE — design tokens (one theme file, light + dark)
-   Palette inspired by Agent Office (MIT) — original values.
+   Shared slate / indigo palette and accessible semantic colors.
    UI theme lives on <html>: .theme-light / .theme-dark / none(auto).
    Office Day/Night is separate (.app.night only dims the scene).
    ============================================================ */
 
 /* ---------- LIGHT (default / auto-light) ---------- */
 :root {
+  color-scheme: light;
   /* type */
   --font-ui: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
     Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -14,20 +15,20 @@
     'Liberation Mono', monospace;
 
   /* surfaces */
-  --bg: #f3f1ec;
+  --bg: #f5f7fb;
   --surface: #ffffff;
-  --surface-2: #faf9f6;
+  --surface-2: #f8fafc;
   --surface-raised: #ffffff;
   --surface-overlay: #ffffff;
-  --sunken: #eceae4;
-  --surface-hover: #f1efe9;
+  --sunken: #eef2f7;
+  --surface-hover: #f0f3f9;
   /* borders */
-  --border: #e7e4dc;
-  --border-strong: #d8d4ca;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
   /* text */
-  --text: #171a21;
-  --text-2: #474d59;
-  --text-3: #7b8291;
+  --text: #172033;
+  --text-2: #475569;
+  --text-3: #56657c;
   /* accent */
   --accent: #4f46e5;
   --accent-hover: #4338ca;
@@ -40,13 +41,19 @@
   --purple: #6d3fd4;     --purple-bg: #f0eafe;  --purple-border: #d9cbfb;
   --teal: #0e7490;       --teal-bg: #e0f2f7;    --teal-border: #b5e0ec;
   --red: #c2322a;        --red-bg: #fbeae9;     --red-border: #eec7c4;
-  --grey-pill: #5b6270;  --grey-bg: #eeece7;    --grey-border: #ddd9d0;
+  --grey-pill: #5b6270;  --grey-bg: #f1f5f9;    --grey-border: #dce3ed;
   /* geometry */
   --space-1: 4px;
   --space-2: 8px;
+  --space-2-5: 12px;
   --space-3: 16px;
   --space-4: 24px;
   --space-5: 32px;
+  --space-6: 48px;
+  --control-height: 44px;
+  --on-solid: #ffffff;
+  --positive-solid: #08783f;
+  --danger-solid: #c12e36;
   --radius: 16px;
   --radius-sm: 12px;
   --radius-ctl: 10px;
@@ -63,6 +70,7 @@
 
 /* ---------- DARK (explicit) ---------- */
 :root.theme-dark {
+  color-scheme: dark;
   --bg: #0b0e14;
   --surface: #141922;
   --surface-2: #171d28;
@@ -74,9 +82,9 @@
   --border-strong: #303a4c;
   --text: #e8eaf0;
   --text-2: #a8b0c0;
-  --text-3: #767e90;
-  --accent: #6366f1;
-  --accent-hover: #7c7ff5;
+  --text-3: #98a5ba;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
   --accent-text: #a5b4fc;
   --accent-subtle: #1f2148;
   --accent-border: #3d3f8a;
@@ -99,6 +107,7 @@
 /* ---------- AUTO — follow the OS when the user picks "system" ---------- */
 @media (prefers-color-scheme: dark) {
   :root:not(.theme-light) {
+    color-scheme: dark;
     --bg: #0b0e14;
     --surface: #141922;
     --surface-2: #171d28;
@@ -110,9 +119,9 @@
     --border-strong: #303a4c;
     --text: #e8eaf0;
     --text-2: #a8b0c0;
-    --text-3: #767e90;
-    --accent: #6366f1;
-    --accent-hover: #7c7ff5;
+    --text-3: #98a5ba;
+    --accent: #4f46e5;
+    --accent-hover: #4338ca;
     --accent-text: #a5b4fc;
     --accent-subtle: #1f2148;
     --accent-border: #3d3f8a;

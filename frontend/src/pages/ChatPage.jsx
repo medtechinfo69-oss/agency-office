@@ -1,8 +1,9 @@
+import ApprovalActions from '../components/ApprovalActions'
 /* Chat with the Manager — date separators, indigo user bubbles right,
    white agent bubbles left with mono meta, composer + tools + trace. */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Send, Activity, X } from 'lucide-react'
-import { StatusPill, Empty } from '../components/ui'
+import { StatusPill, Empty, ActionButton } from '../components/ui'
 
 const QUICK = [
   { id: 'campaign', label: '🚀 Launch a full campaign' },
@@ -38,13 +39,13 @@ export default function ChatPage({
   const submit = (e) => {
     e?.preventDefault()
     const v = text.trim()
-    if (!v || !projectId) return
+    if (!v || !projectId || busy) return
     onSend(v)
     setText('')
   }
 
   const quick = (id) => {
-    if (!projectId) return
+    if (!projectId || busy) return
     if (id === 'campaign') onSend('Build the full campaign package now.')
     if (id === 'calendar') onSend('Build the 30-day content calendar now.')
     if (id === 'trends') onTrends()
@@ -61,10 +62,7 @@ export default function ChatPage({
                 <p className="approval-plan">{approval.plan.summary}</p>
               )}
             </div>
-            <div className="approval-actions">
-              <button className="btn ghost" onClick={() => onApprove(approval.kind, false)}>{t('reject')}</button>
-              <button className="btn good" onClick={() => onApprove(approval.kind, true)}>{t('approve')}</button>
-            </div>
+            <ApprovalActions key={approval.kind} t={t} kind={approval.kind} onApprove={onApprove} />
           </div>
         )}
 
@@ -81,7 +79,7 @@ export default function ChatPage({
           ))}
           {busy && (
             <div className="msg agent">
-              <div className="bubble-agent typing">
+              <div className="bubble-agent typing" role="status" aria-label="Nora is responding">
                 <span /><span /><span />
               </div>
             </div>
@@ -92,12 +90,14 @@ export default function ChatPage({
         {/* quick actions */}
         <div className="chat-quick">
           {QUICK.map((q) => (
-            <button key={q.id} className="quick-chip" onClick={() => quick(q.id)}>{q.label}</button>
+            <button key={q.id} className="quick-chip" disabled={busy || !projectId} onClick={() => quick(q.id)}>{q.label}</button>
           ))}
         </div>
 
         <form className="composer" onSubmit={submit}>
           <textarea
+            aria-label="Message to Nora"
+            aria-describedby="composer-help"
             className="composer-input"
             rows={2}
             value={text}
@@ -108,21 +108,21 @@ export default function ChatPage({
             }}
           />
           <div className="composer-side">
-            <span className="composer-hint mono">⌘↵ to send</span>
-            <button className="btn primary" disabled={busy || !text.trim()} type="submit">
-              <Send size={14} /> {t('send')}
+            <span id="composer-help" className="composer-hint">{projectId ? 'Ctrl / ⌘ + Enter to send' : 'Create a project to start'}</span>
+            <button className="btn primary" disabled={busy || !projectId || !text.trim()} type="submit">
+              <Send size={14} /> {busy ? 'Sending…' : t('send')}
             </button>
           </div>
         </form>
 
         <div className="chat-tools">
-          <button className="btn sm" onClick={onStandup}>🌅 {t('standup')}</button>
-          <button className="btn sm" onClick={() => onMeeting('Brainstorm: next best move')}>🧠 {t('meeting')}</button>
-          <button className="btn sm" onClick={onTrends}>🕵️ {t('trends')}</button>
+          <ActionButton className="btn sm" disabled={!projectId || busy} onClick={onStandup}>🌅 {t('standup')}</ActionButton>
+          <ActionButton className="btn sm" disabled={!projectId || busy} onClick={() => onMeeting('Brainstorm: next best move')}>🧠 {t('meeting')}</ActionButton>
+          <ActionButton className="btn sm" disabled={!projectId || busy} onClick={onTrends}>🕵️ {t('trends')}</ActionButton>
           <span className="spacer" />
-          <button className="btn sm" onClick={onPreview}>👁 {t('preview')}</button>
-          <button className="btn sm" onClick={onAnalytics}>📈 {t('analytics')}</button>
-          <button className="btn sm" onClick={onExport}>⤓ {t('export')}</button>
+          <button className="btn sm" disabled={!projectId || busy} onClick={onPreview}>👁 {t('preview')}</button>
+          <button className="btn sm" disabled={!projectId || busy} onClick={onAnalytics}>📈 {t('analytics')}</button>
+          <button className="btn sm" disabled={!projectId || busy} onClick={onExport}>⤓ {t('export')}</button>
           <button className={`btn sm ${trace ? 'active' : ''}`} onClick={() => setTrace((v) => !v)}>
             <Activity size={13} /> Open trace
           </button>
@@ -134,7 +134,7 @@ export default function ChatPage({
         <aside className="trace-drawer card">
           <div className="pane-head">
             <span className="eyebrow">Trace · activity</span>
-            <button className="ap-close" onClick={() => setTrace(false)}><X size={13} /></button>
+            <button className="ap-close" aria-label="Close trace" onClick={() => setTrace(false)}><X size={13} /></button>
           </div>
           <div className="trace-list">
             {[...log].slice(-80).reverse().map((l, i) => (

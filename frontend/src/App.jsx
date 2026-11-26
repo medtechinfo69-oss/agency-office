@@ -18,7 +18,7 @@ import LogsPage from './pages/LogsPage'
 import PermissionsPage from './pages/PermissionsPage'
 import SystemHealthPage from './pages/SystemHealthPage'
 import ShopPage from './pages/ShopPage'
-import SettingsPage from './pages/SettingsPage'
+import SettingsPage, { ADMIN_PAGES } from './pages/SettingsPage'
 import SiteBuilderPage from './sitebuilder/main'
 
 /* Simple WebAudio blips (no assets needed) */
@@ -44,7 +44,7 @@ const audio = {
 
 let toastSeq = 0
 
-export default function App() {
+export default function App({ onLogout } = {}) {
   /* ---------------- state ---------------- */
   const [lang, setLang] = useState('en')
   const [settings, setSettings] = useState(null)
@@ -60,16 +60,30 @@ export default function App() {
   const [escalation, setEscalation] = useState(null)
   const [picked, setPicked] = useState(null)
   const [modal, setModal] = useState(null) // preview|analytics|new
-  const [page, setPage] = useState('office')
-  const [builderVisited, setBuilderVisited] = useState(false)
-  const [theme, setTheme] = useState(() => localStorage.getItem('ao_theme') || 'auto')
+  const [page, updatePage] = useState(() => location.hash.slice(1) || 'office')
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [profile, setProfile] = useState(null)
+  const setPage = useCallback((value) => { location.hash = value; updatePage(value) }, [])
+  useEffect(() => {
+    const sync = () => { const id = location.hash.slice(1) || 'office'; updatePage(id); if (id === 'builder') setBuilderVisited(true) }
+    window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
+  }, [])
+  useEffect(() => {
+    const load = () => api.get('/admin/me').then(setProfile).catch(() => {})
+    load(); window.addEventListener('agency-profile-updated', load)
+    return () => window.removeEventListener('agency-profile-updated', load)
+  }, [])
+  const [builderVisited, setBuilderVisited] = useState(() => location.hash === '#builder')
+  const [theme, setTheme] = useState(() => localStorage.getItem('ao_theme') || 'night')
   const [control, setControl] = useState('running')
   const [chatBusy, setChatBusy] = useState(false)
   const [connected, setConnected] = useState(false)
   const [showDemoBanner, setShowDemoBanner] = useState(true)
   const [toasts, setToasts] = useState([])
   const [clock, setClock] = useState('')
-  const [sound, setSound] = useState(() => localStorage.getItem('ao_sound') || 'on')
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const officeApi = useRef(null)
 
   const t = useCallback((k) => translate(lang, k), [lang])
@@ -87,7 +101,7 @@ export default function App() {
     setProjects(list)
     if (!projectId && list.length) setProjectId(list[0].id)
     // first open with an empty office → straight into creating a real project
-    if (!list.length && !autoNewRef.current) {
+    if (!list.length && !autoNewRef.current && !location.hash.startsWith('#settings')) {
       autoNewRef.current = true
       setModal('new')
     }
@@ -247,6 +261,8 @@ export default function App() {
     if (theme === 'day') r.classList.add('theme-light')
     if (theme === 'night') r.classList.add('theme-dark')
     localStorage.setItem('ao_theme', theme)
+    r.dataset.accent = localStorage.getItem('ao_accent') || 'indigo'
+    r.dataset.density = localStorage.getItem('ao_density') || 'comfortable'
   }, [theme])
 
   /* ---------------- boot (parallel for fast first paint) ---------------- */
@@ -258,7 +274,6 @@ export default function App() {
         setSettings(s)
         setLang(s.language || 'en')
         localStorage.setItem('ao_sound', s.sound || 'on')
-        setSound(s.sound || 'on')
         const [list] = await Promise.all([loadProjects(), loadAgents()])
         if (list.length) {
           const id = list[0].id
@@ -266,20 +281,22 @@ export default function App() {
           await Promise.all([loadProject(id), loadMessages(id), loadLog(id)])
         }
       } catch (e) {
+        setLoadError('Unable to load the office. Check that the backend is running, then retry.')
         setLog([{ level: 'error', text: 'Backend unreachable: ' + e.message }])
+      } finally {
+        setLoading(false)
       }
     })()
-  }, []) // eslint-disable-line
+  }, [])
 
   useEffect(() => {
     if (!projectId) return
-    loadProject(projectId)
-    loadMessages(projectId)
-    loadLog(projectId)
+    Promise.all([loadProject(projectId), loadMessages(projectId), loadLog(projectId)])
+      .catch((e) => pushToast('Could not load project: ' + e.message, 'error'))
     setApproval(null)
     setEscalation(null)
     setPicked(null)
-  }, [projectId]) // eslint-disable-line
+  }, [projectId])
 
   useEffect(() => {
     const stop = connectWS(
@@ -400,7 +417,7 @@ export default function App() {
   const night = (settings?.day_night || 'day') === 'night'
   const speed = Number(settings?.speed || 1)
 
-  const setDayNight = (v) => api.saveSettings({ day_night: v }).then(setSettings).catch(() => {})
+  const setDayNight = (v) => api.saveSettings({ day_night: v }).then(setSettings).catch((e) => pushToast(e.message, 'error'))
 
   const onPickAgent = (id) => {
     if (id === '__shop__') { setPage('shop'); return }
@@ -408,46 +425,56 @@ export default function App() {
   }
 
   /* page → title + question subtitle */
+  const adminSection = page === 'settings' ? 'connections' : page.startsWith('settings/') ? page.split('/')[1] : null
+  const adminItem = ADMIN_PAGES.find((p) => p.id === adminSection)
   const navItem = NAV.find((n) => n.id === page) || NAV[0]
   const title = page === 'office'
     ? (project?.name || t('title'))
-    : (t('nav.' + page) !== 'nav.' + page ? t('nav.' + page) : navItem.label)
+    : adminItem ? adminItem.label : (t('nav.' + page) !== 'nav.' + page ? t('nav.' + page) : navItem.label)
   const question = t('sub.' + page)
 
   /* ---------------- render ---------------- */
   return (
     <div className={`app ${night ? 'night' : 'day'}`} dir={dir(lang)}>
-      {health?.demo && showDemoBanner && (
-        <div className="demo-banner">
-          {health.demo_reason === 'billing'
-            ? '💳 APInex billing issue (402) — running DEMO fallback so you can explore. Top up at apinex.bond/billing, then restart to resume real AI.'
-            : '🧪 ' + t('demoNote')}
-          <button onClick={() => setShowDemoBanner(false)}>✕</button>
-        </div>
-      )}
-
+      <a className="skip-link" href="#main-content">Skip to content</a>
       <Sidebar
-        page={page} onNavigate={(p) => { if (p === 'builder') setBuilderVisited(true); setPage(p); setPicked(null) }}
+        page={page} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} profile={profile} onNavigate={(p) => { if (p === 'builder') setBuilderVisited(true); setPage(p); setPicked(null) }}
         lang={lang}
-        onLang={(v) => { setLang(v); api.saveSettings({ language: v }).then(setSettings) }}
+        onLang={(v) => { setLang(v); api.saveSettings({ language: v }).then(setSettings).catch((e) => pushToast(e.message, 'error')) }}
         theme={theme} onTheme={setTheme}
         t={t}
-        onLogout={() => pushToast('Logout is disabled in this demo', 'warn')}
+        onLogout={onLogout || (() => pushToast('Local mode has no sign-in session', 'info'))}
       />
 
-      <main className={`workspace ${page === 'builder' ? 'builder-workspace' : ''}`}>
-        {page !== 'builder' && <TopBar
+      <main id="main-content" tabIndex={-1} className={`workspace ${page === 'builder' ? 'builder-workspace' : ''}`}>
+        {import.meta.env.VITE_EVENT_TRANSPORT === 'poll' && (
+          <div className="feedback-banner a-cloud-notice" role="note">Cloud mode: keep this tab open to advance jobs. Scheduled runs are unavailable on this hosting setup. Add a cloud AI provider key in Settings to generate real content.</div>
+        )}
+        {health?.demo && showDemoBanner && (
+          <div className="demo-banner">
+            {health.demo_reason === 'billing'
+              ? '💳 APInex billing issue (402) — running DEMO fallback so you can explore. Top up at apinex.bond/billing, then restart to resume real AI.'
+              : '🧪 ' + t('demoNote')}
+            <button aria-label="Dismiss demo notice" onClick={() => setShowDemoBanner(false)}>✕</button>
+          </div>
+        )}
+        {<TopBar
           title={title} question={question}
           live={connected} clock={clock}
-          provider={health?.provider_label} demo={health?.demo}
-          right={page === 'projects' || page === 'office' ? (
+          provider={health?.provider_label} model={health?.model} demo={health?.demo}
+          onNavigate={setPage} onLogout={onLogout || (() => pushToast('Local mode has no sign-in session', 'info'))}
+          onMenu={() => setMobileOpen(true)} mobileOpen={mobileOpen} profile={profile}
+          right={page === 'office' ? (
             <div className="project-pick">
-              <select value={projectId || ''} onChange={(e) => setProjectId(e.target.value)}>
+              <select aria-label="Current project" value={projectId || ''} onChange={(e) => setProjectId(e.target.value)}>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
           ) : null}
         />}
+
+        {loading && page !== 'builder' && <div className="feedback-banner" role="status"><span className="loading-dot" /> Loading your workspace…</div>}
+        {loadError && page !== 'builder' && <div className="feedback-banner error" role="alert"><span>{loadError}</span><button className="btn sm" onClick={() => window.location.reload()}>Retry</button></div>}
 
         {builderVisited && <div style={{display: page === 'builder' ? 'contents' : 'none'}}><SiteBuilderPage officeTheme={theme} /></div>}
 
@@ -491,10 +518,10 @@ export default function App() {
         {page === 'health' && <SystemHealthPage t={t} health={health} />}
         {page === 'shop' && <ShopPage t={t} agents={agents} onRefresh={loadAgents} />}
 
-        {page === 'settings' && (
-          <SettingsPage
+        {adminSection && (
+          <SettingsPage key={adminSection} section={adminSection} notify={pushToast} reloadAgents={loadAgents}
             t={t} lang={lang} setLang={setLang}
-            agents={agents} health={health} onRefresh={refreshHealth}
+            agents={agents} health={health} connected={connected} onRefresh={refreshHealth}
             onNavigate={setPage}
             theme={theme} setTheme={setTheme}
             dayNight={settings?.day_night || 'day'} setDayNight={setDayNight}
@@ -510,9 +537,9 @@ export default function App() {
       </main>
 
       {/* notification toasts */}
-      <div className="toast-stack">
+      <div className="toast-stack" role="region" aria-label="Notifications" aria-live="polite" aria-relevant="additions">
         {toasts.map((x) => (
-          <div key={x.id} className={`toast-item ${x.kind}`}>{x.text}</div>
+          <div key={x.id} className={`toast-item ${x.kind}`}><span>{x.text}</span><button aria-label="Dismiss notification" onClick={() => setToasts((list) => list.filter((item) => item.id !== x.id))}>×</button></div>
         ))}
       </div>
 

@@ -12,31 +12,59 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+from .media import DurableMedia
 
 from . import agents as agentreg
 from . import db, scheduler
 from .config import settings
 from .events import bus
+from .access import OwnerAccess, OwnerAccessMiddleware, auth_router
 from .routers import api
 from . import sitebuilder
 
 app = FastAPI(title="AGENCY OFFICE", version="1.0.0")
+access = OwnerAccess.from_env()
+app.state.owner_access = access
+app.add_middleware(OwnerAccessMiddleware, access=access)
+app.include_router(auth_router(access))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # local-first app; frontend is served by Vite/dev server
+    allow_origins=list(access.origins) if access.production else ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 # compress JSON/HTML/CSS/JS on the wire — faster first load
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
+from . import admin
+app.include_router(admin.router)
 app.include_router(api.router)
+from .cloud import router as cloud_router
+app.include_router(cloud_router)
 app.include_router(sitebuilder.router, prefix="/api/sitebuilder", tags=["site builder"])
 
 # generated images / logos / exports
-app.mount("/media", StaticFiles(directory=str(settings.media_dir)), name="media")
+app.mount("/media", DurableMedia(directory=str(settings.media_dir)), name="media")
+
+
+@app.get('/', response_class=HTMLResponse)
+def backend_status():
+    try:
+        db.one('SELECT 1')
+    except Exception as error:
+        # Only fixed diagnostic codes, never connection strings or exception text.
+        reason = 'connection-or-schema'
+        detail = str(error).lower()
+        for fragment, code in [('certificate', 'tls-certificate'), ('password authentication', 'database-login'),
+                               ('tenant or user', 'pooler-tenant'), ('permission denied', 'schema-permission'),
+                               ('timeout', 'connection-timeout'), ('resolve', 'hostname-resolution')]:
+            if fragment in detail: reason = code; break
+        return HTMLResponse('<h1>Agency Office API</h1><p>Database unavailable: ' + reason + '</p>', status_code=200)
+    mode = 'Supabase Postgres' if os.getenv('DATABASE_URL') else 'local SQLite'
+    return HTMLResponse('<h1>Agency Office API is running</h1><p>Database: ' + mode + '</p>'
+        '<p><a href="https://agency-office-indol.vercel.app/">Open Agency Office</a></p>')
 
 
 # ---------------------------------------------------------------- WebSocket
@@ -57,6 +85,19 @@ async def ws_endpoint(ws: WebSocket) -> None:
 # ---------------------------------------------------------------- lifecycle
 @app.on_event("startup")
 async def on_startup() -> None:
+    try:
+        admin.initialize()
+        if os.getenv('VERCEL') == '1': sitebuilder.init()
+        await initialize_office()
+    except Exception:
+        if os.getenv('VERCEL') != '1': raise
+        # Keep the gated app's public diagnostic reachable on a configuration
+        # failure. Private endpoints still require auth and a working database.
+        import logging
+        logging.getLogger(__name__).exception('Cloud database initialization failed')
+
+
+async def initialize_office() -> None:
     # Settings-page values (kv) override env seeds for provider creds —
     # the UI is the source of truth once a key/model was saved there.
     import os
@@ -94,7 +135,8 @@ async def on_startup() -> None:
     agentreg.seed_agents()
     seed_templates()
     seed_prompts()
-    await scheduler.start()
+    if os.getenv('VERCEL') != '1':
+        await scheduler.start()
     bus.publish_sync("log", {"level": "success",
                              "text": "🏢 Agency office is open."})
 
@@ -126,7 +168,7 @@ def seed_templates() -> None:
          {"deliverables": ["design", "copy", "images", "campaign"]}),
     ]
     for tid, name, brief, meta in templates:
-        db.execute("INSERT INTO templates (id, name, brief, meta) VALUES (?,?,?,?)",
+        db.execute("INSERT INTO templates (id, name, brief, meta) VALUES (?,?,?,?) ON CONFLICT(id) DO NOTHING",
                    (tid, name, brief, db.jdump(meta)))
 
 
@@ -155,7 +197,7 @@ def seed_prompts() -> None:
     ]
     for pid, name, cat, content in prompts:
         db.execute("INSERT INTO agents_prompts (id, name, category, content, created_at) "
-                   "VALUES (?,?,?,?,?)", (pid, name, cat, content, db.now()))
+                   "VALUES (?,?,?,?,?) ON CONFLICT(id) DO NOTHING", (pid, name, cat, content, db.now()))
 
 
 # NOTE: no demo project is seeded — the app opens on an empty office and the

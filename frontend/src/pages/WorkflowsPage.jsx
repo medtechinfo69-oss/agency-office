@@ -15,23 +15,27 @@ function nextIn(hours, seed = 0) {
 
 export default function WorkflowsPage({ t, projects }) {
   const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
 
   useEffect(() => {
     let alive = true
+    setRows(null); setError('')
     ;(async () => {
       try {
         const lists = await Promise.all(projects.map((p) =>
-          api.schedules(p.id).then((s) => s.map((x) => ({ ...x, project: p.name, pid: p.id }))).catch(() => [])))
+          api.schedules(p.id).then((s) => s.map((x) => ({ ...x, project: p.name, pid: p.id })))))
         if (alive) setRows(lists.flat())
-      } catch { if (alive) setRows([]) }
+      } catch (e) { if (alive) { setRows([]); setError(e.message) } }
     })()
     return () => { alive = false }
-  }, [projects])
+  }, [projects, retry])
 
   if (rows === null) return <div className="page"><Empty icon="⏳" title="Loading workflows…" /></div>
 
   return (
     <div className="page workflows-page">
+      {error && <div className="feedback-banner error" role="alert"><span>Could not load workflows: {error}</span><button className="btn" onClick={() => setRetry((n) => n + 1)}>Retry</button></div>}
       <div className="wf-grid">
         {rows.map((w) => (
           <Card key={w.id} className="wf-card">
@@ -59,7 +63,7 @@ export default function WorkflowsPage({ t, projects }) {
           </Card>
         ))}
       </div>
-      {rows.length === 0 && (
+      {!error && rows.length === 0 && (
         <Empty icon="⚡" title="No workflows yet"
           hint="Auto-schedules (weekly posts, reports…) appear here once created in Settings." />
       )}

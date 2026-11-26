@@ -1,0 +1,40 @@
+# This blueprint provisions a PAID service + persistent disk when the owner
+# explicitly applies it in Render. Review Render's displayed price first.
+services:
+  - type: web
+    name: agency-office-api
+    runtime: docker
+    repo: https://github.com/medtechinfo69-oss/agency-office
+    branch: arena/38052b10-agency-office
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: frankfurt
+    numInstances: 1
+    autoDeploy: false
+    healthCheckPath: /healthz
+    disk:
+      name: agency-office-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATA_DIR
+        value: /data
+      - key: DB_PATH
+        value: /data/agency.db
+      - key: ACCESS_PASSWORD
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      # Filled after Vercel gives us the exact frontend origin. Empty means
+      # browser writes/sign-in are blocked, not that any origin is trusted.
+      - key: ALLOWED_ORIGINS
+        value: ""
+      - key: DEMO_MODE
+        value: "false"
+      - key: ACTIVE_PROVIDER
+        value: openrouter
+      - key: IMAGE_MODEL
+        value: pollinations-free

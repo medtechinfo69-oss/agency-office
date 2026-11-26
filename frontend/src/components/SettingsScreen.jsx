@@ -13,14 +13,20 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
   const [schedules, setSchedules] = useState([])
   const [editing, setEditing] = useState(null)
   const [toast, setToast] = useState('')
+  const [pending, setPending] = useState('')
+  const run = async (key, action) => {
+    if (pending) return
+    setPending(key)
+    try { await action() } finally { setPending('') }
+  }
   const [providers, setProviders] = useState([])
   const [pforms, setPforms] = useState({})  // per-provider edit fields
   const [mstate, setMstate] = useState({})  // per-provider model-list status
 
   useEffect(() => { setS(settings || {}) }, [settings])
   useEffect(() => {
-    api.agents().then(setAgents).catch(() => {})
-    api.prompts().then(setPrompts).catch(() => {})
+    api.agents().then(setAgents).catch((e) => flash('⚠ Unable to load settings: ' + e.message))
+    api.prompts().then(setPrompts).catch((e) => flash('⚠ Unable to load settings: ' + e.message))
     api.providers().then((list) => {
       setProviders(list)
       const forms = {}
@@ -37,10 +43,10 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
           checkModels(p.key, { silent: true })
         }
       }
-    }).catch(() => {})
+    }).catch((e) => flash('⚠ Unable to load settings: ' + e.message))
     if (projectId) {
-      api.brand(projectId).then(setBrand).catch(() => {})
-      api.schedules(projectId).then(setSchedules).catch(() => {})
+      api.brand(projectId).then(setBrand).catch((e) => flash('⚠ Unable to load settings: ' + e.message))
+      api.schedules(projectId).then(setSchedules).catch((e) => flash('⚠ Unable to load settings: ' + e.message))
     }
   }, [projectId]) // eslint-disable-line
 
@@ -195,6 +201,7 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
 
   return (
     <div className="settings-screen">
+      {pending && <div className="feedback-banner" role="status"><span className="loading-dot" /> Saving changes…</div>}
       <div className="modal wide static" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <span>⚙️ {t('settings')}</span>
@@ -210,14 +217,14 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
             ['sched', '⏰ ' + t('scheduled')],
             ['ui', '🎛 UI'],
           ].map(([k, label]) => (
-            <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>
+            <button key={k} aria-pressed={tab === k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>
               {label}
             </button>
           ))}
         </div>
 
         <div className="modal-body">
-          {toast && <div className="toast">{toast}</div>}
+          {toast && <div className="toast" role="status">{toast}</div>}
 
           {tab === 'providers' && (
             <div>
@@ -246,10 +253,10 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
                       )}
                     </div>
                     <div className="provider-form">
-                      <input
+                      <label>Base URL<input
                         type="text"
                         className="p-url"
-                        title="base URL"
+                        title="base URL" aria-label={`${p.label} base URL`}
                         placeholder="base URL (e.g. http://localhost:11434/v1)"
                         value={pforms[p.key]?.base_url ?? p.base_url}
                         onChange={(e) => setPforms((f) => ({
@@ -259,14 +266,14 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
                           const v = (pforms[p.key]?.base_url || '').trim()
                           if (v) checkModels(p.key, { silent: true })
                         }}
-                      />
-                      <select
+                      /></label>
+                      <label>Text model<select
                         className="p-select"
                         value={pforms[p.key]?.model ?? p.model}
                         onChange={(e) => setPforms((f) => ({
                           ...f, [p.key]: { ...(f[p.key] || {}), model: e.target.value },
                         }))}
-                        title="model"
+                        title="model" aria-label={`${p.label} text model`}
                       >
                         {(() => {
                           const ms = mstate[p.key] || {}
@@ -284,9 +291,9 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
                           if (!opts.length) opts.push(<option key="__cur" value={cur}>{cur}</option>)
                           return opts
                         })()}
-                      </select>
-                      <input
-                        type="password"
+                      </select></label>
+                      <label>API key<input
+                        type="password" aria-label={`${p.label} API key`} autoComplete="off"
                         placeholder={p.token_set ? '•••••• stored (leave empty to keep)' : 'API key…'}
                         value={pforms[p.key]?.token ?? ''}
                         onChange={(e) => setPforms((f) => ({
@@ -296,20 +303,20 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
                           const v = e.target.value.trim()
                           if (v.length >= 12) checkModels(p.key, { token: v })
                         }}
-                      />
-                      <button className="btn" onClick={() => saveProviderCred(p.key)}>
+                      /></label>
+                      <button className="btn" disabled={!!pending} aria-busy={pending === p.key} onClick={() => run(p.key, () => saveProviderCred(p.key))}>
                         💾 {t('save')}
                       </button>
                       {!p.active && (
-                        <button className="btn primary" onClick={() => activateProvider(p.key)}>
+                        <button className="btn primary" disabled={!!pending} onClick={() => run(p.key, () => activateProvider(p.key))}>
                           ⚡ {p.token_set || p.key === 'ollama' ? 'Activate' : 'Activate anyway'}
                         </button>
                       )}
                     </div>
                     <div className="provider-sub">
-                      <select
+                      <label className="field">Image model<select
                         className="p-select img"
-                        title="image model"
+                        title="image model" aria-label={`${p.label} image model`}
                         value={pforms[p.key]?.image_model || 'pollinations-free'}
                         onChange={(e) => setPforms((f) => ({
                           ...f, [p.key]: { ...(f[p.key] || {}), image_model: e.target.value },
@@ -319,8 +326,8 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
                         {(mstate[p.key]?.images_api ? (mstate[p.key]?.models || []) : [])
                           .filter((m) => m.image && m.id !== 'pollinations-free')
                           .map((m) => <option key={m.id} value={m.id}>🖼 {m.id}</option>)}
-                      </select>
-                      <span className={`p-status ${
+                      </select></label>
+                      <span role="status" className={`p-status ${
                         mstate[p.key]?.status === 'checking' ? 'busy'
                           : mstate[p.key]?.status === 'ok' ? 'good'
                           : mstate[p.key]?.status === 'error' ? 'bad' : ''}`}>
@@ -346,7 +353,7 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
                   {t('autoApprove')}
                 </label>
                 <div className="btn-row">
-                  <button className="btn primary" onClick={saveProvider}>{t('save')}</button>
+                  <button className="btn primary" disabled={!!pending} aria-busy={pending === 'saveProvider'} onClick={() => run('saveProvider', saveProvider)}>{t('save')}</button>
                 </div>
                 <div className="dim" style={{ gridColumn: '1 / -1' }}>
                   Models and the image model are selected automatically the moment
@@ -385,7 +392,7 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
                 <textarea rows={4} value={(brand.rules || []).join('\n')}
                   onChange={(e) => setBrand({ ...brand, rules: e.target.value.split('\n').filter(Boolean) })} />
               </label>
-              <div className="btn-row"><button className="btn primary" onClick={saveBrand}>{t('save')}</button></div>
+              <div className="btn-row"><button className="btn primary" disabled={!!pending} aria-busy={pending === 'saveBrand'} onClick={() => run('saveBrand', saveBrand)}>{t('save')}</button></div>
             </div>
           )}
 
@@ -404,8 +411,8 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
                     <b>{a.name}</b> <span className="dim">{a.role}</span>
                     <span className="chip">L{a.level}</span>
                     <span className="spacer" />
-                    <button className="btn ghost" onClick={() => setEditing(a)}>✏️</button>
-                    {a.custom === 1 && <button className="btn bad" onClick={() => fireAgent(a.id)}>🗑</button>}
+                    <button className="btn ghost" aria-label={`Edit ${a.name}`} onClick={() => setEditing(a)}>✏️</button>
+                    {a.custom === 1 && <button className="btn bad" aria-label={`Remove ${a.name}`} onClick={() => fireAgent(a.id)}>🗑</button>}
                   </div>
                 ))}
               </div>
@@ -434,7 +441,7 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
                     </label>
                   </div>
                   <div className="btn-row">
-                    <button className="btn primary" onClick={saveAgent}>{t('save')}</button>
+                    <button className="btn primary" disabled={!!pending} aria-busy={pending === 'saveAgent'} onClick={() => run('saveAgent', saveAgent)}>{t('save')}</button>
                     <button className="btn" onClick={() => setEditing(null)}>{t('close')}</button>
                   </div>
                 </div>
@@ -444,14 +451,16 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
 
           {tab === 'prompts' && (
             <div>
-              <div className="btn-row"><button className="btn primary" onClick={savePrompt}>+ New prompt</button></div>
+              <div className="btn-row"><button className="btn primary" disabled={!!pending} aria-busy={pending === 'savePrompt'} onClick={() => run('savePrompt', savePrompt)}>+ New prompt</button></div>
               {prompts.map((p) => (
                 <div key={p.id} className="prompt-row">
                   <span className="chip">{p.category}</span>
                   <b>{p.name}</b>
                   <div className="dim">{p.content.slice(0, 140)}…</div>
-                  <button className="btn bad" onClick={async () => {
-                    await api.deletePrompt(p.id); setPrompts(await api.prompts())
+                  <button className="btn bad" aria-label={`Delete prompt ${p.name}`} onClick={async () => {
+                    if (!confirm(`Delete prompt “${p.name}”? This cannot be undone.`)) return
+                    try { await api.deletePrompt(p.id); setPrompts(await api.prompts()); flash('✔ Prompt deleted') }
+                    catch (e) { flash('⚠ ' + e.message) }
                   }}>🗑</button>
                 </div>
               ))}
@@ -500,7 +509,7 @@ export default function SettingsScreen({ t, lang, setLang, settings, onSaveSetti
                 <input type="range" min="0.25" max="3" step="0.25" value={s.speed || 1}
                   onChange={(e) => setS({ ...s, speed: Number(e.target.value) })} />
               </label>
-              <div className="btn-row"><button className="btn primary" onClick={saveProvider}>{t('save')}</button></div>
+              <div className="btn-row"><button className="btn primary" disabled={!!pending} aria-busy={pending === 'saveProvider'} onClick={() => run('saveProvider', saveProvider)}>{t('save')}</button></div>
             </div>
           )}
         </div>

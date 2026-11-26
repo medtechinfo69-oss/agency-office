@@ -1,8 +1,10 @@
+import useDialog from './useDialog'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 
 /* Analytics dashboard: paste campaign results → agents learn what performs */
 export default function AnalyticsScreen({ t, projectId, onClose }) {
+  const dialogRef = useDialog(onClose)
   const [rows, setRows] = useState([])
   const [form, setForm] = useState({ campaign: '', reach: '', clicks: '', spend: '', ctr: '', notes: '' })
   const [insight, setInsight] = useState('')
@@ -14,7 +16,7 @@ export default function AnalyticsScreen({ t, projectId, onClose }) {
 
   const add = async (e) => {
     e.preventDefault()
-    if (!form.campaign.trim()) return
+    if (!form.campaign.trim()) { setToast('Enter a campaign name, not just spaces.'); return }
     setBusy(true)
     try {
       const metrics = {}
@@ -23,6 +25,7 @@ export default function AnalyticsScreen({ t, projectId, onClose }) {
       }
       await api.addAnalytics(projectId, { campaign: form.campaign, metrics, notes: form.notes })
       setForm({ campaign: '', reach: '', clicks: '', spend: '', ctr: '', notes: '' })
+      setToast('Results saved successfully.')
       load()
     } catch (err) { setToast('⚠ ' + err.message) }
     setBusy(false)
@@ -37,32 +40,36 @@ export default function AnalyticsScreen({ t, projectId, onClose }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={t('analytics')} tabIndex={-1} className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <span>📈 {t('analytics')}</span>
-          <button className="ap-close" onClick={onClose}>✕</button>
+          <button className="ap-close" aria-label="Close dialog" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
           <form className="analytics-form" onSubmit={add}>
-            <input placeholder="Campaign name *" value={form.campaign}
-              onChange={(e) => setForm({ ...form, campaign: e.target.value })} />
-            <input placeholder={t('reach')} type="number" value={form.reach}
-              onChange={(e) => setForm({ ...form, reach: e.target.value })} />
-            <input placeholder={t('clicks')} type="number" value={form.clicks}
-              onChange={(e) => setForm({ ...form, clicks: e.target.value })} />
-            <input placeholder={t('spend')} type="number" step="0.01" value={form.spend}
-              onChange={(e) => setForm({ ...form, spend: e.target.value })} />
-            <input placeholder={t('ctr') + ' %'} type="number" step="0.01" value={form.ctr}
-              onChange={(e) => setForm({ ...form, ctr: e.target.value })} />
-            <input placeholder={t('notes')} value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-            <button className="btn primary" disabled={busy}>+ {t('pasteResults')}</button>
+            <label className="field">Campaign name <span className="field-help">Required</span>
+              <input required data-dialog-focus="true" placeholder="e.g. Summer launch" value={form.campaign}
+                onChange={(e) => setForm({ ...form, campaign: e.target.value })} />
+            </label>
+            <div className="form-grid">
+              {['reach', 'clicks', 'spend', 'ctr'].map((key) => (
+                <label className="field" key={key}>{t(key)}{key === 'ctr' ? ' (%)' : ''}
+                  <input type="number" min="0" max={key === 'ctr' ? 100 : undefined}
+                    step={['spend', 'ctr'].includes(key) ? '0.01' : '1'} value={form[key]}
+                    onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
+                </label>
+              ))}
+            </div>
+            <label className="field">{t('notes')}
+              <textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </label>
+            <button className="btn primary" disabled={busy}>{busy ? 'Working…' : '+ ' + t('pasteResults')}</button>
           </form>
 
-          {toast && <div className="toast">{toast}</div>}
+          {toast && <div className="toast" role="status">{toast}</div>}
 
           <div className="analytics-table-wrap">
-            <table className="cal-table">
+            <table className="cal-table"><caption className="sr-only">Campaign performance results</caption>
               <thead>
                 <tr><th>Campaign</th><th>{t('reach')}</th><th>{t('clicks')}</th>
                   <th>{t('spend')}</th><th>{t('ctr')}</th><th>{t('notes')}</th></tr>
@@ -74,7 +81,7 @@ export default function AnalyticsScreen({ t, projectId, onClose }) {
                     <td>{r.metrics.reach ?? '—'}</td>
                     <td>{r.metrics.clicks ?? '—'}</td>
                     <td>{r.metrics.spend ?? '—'}</td>
-                    <td>{r.metrics.ctr ?? '—'}%</td>
+                    <td>{r.metrics.ctr != null ? `${r.metrics.ctr}%` : '—'}</td>
                     <td>{r.notes}</td>
                   </tr>
                 ))}

@@ -1,26 +1,6 @@
-/* Page header: bold title + question subtitle · right: provider pill,
-   green Live pill, monospace clock. */
-export default function TopBar({ title, question, live, clock, provider, demo, right }) {
-  return (
-    <header className="topbar">
-      <div className="topbar-title">
-        <h1>{title}</h1>
-        <p>{question}</p>
-      </div>
-      <div className="topbar-right">
-        {right}
-        {provider !== undefined && (
-          <span className={`provider-pill ${demo ? 'demo' : ''}`}
-            title={demo ? 'Demo provider' : provider}>
-            {demo ? '🧪 DEMO' : provider}
-          </span>
-        )}
-        <span className="live-badge" title={live ? 'Connected' : 'Reconnecting…'}>
-          <span className={`live-dot ${live ? 'on' : ''}`} />
-          Live
-        </span>
-        <span className="clock mono">{clock}</span>
-      </div>
-    </header>
-  )
+import { Box, ChevronRight, LogOut, Menu, Settings, UserRound } from 'lucide-react'
+import { Badge, Button } from './admin-ui'
+
+export default function TopBar({ title, live, provider, model, demo, right, onNavigate, onLogout, onMenu, mobileOpen, profile }) {
+  return <header className="topbar"><div className="a-top-breadcrumb"><Button variant="ghost" className="a-mobile-toggle" aria-label="Open navigation" aria-expanded={mobileOpen} aria-controls="agency-navigation" onClick={onMenu}><Menu size={20} /></Button><span>Workspace</span><ChevronRight size={14} /><strong>{title}</strong></div><div className="a-top-actions">{right}<div className="a-model" title={model || provider || 'Configure a model in Connections'}><Box size={15} /><span>{demo ? 'Demo provider' : model && model !== '-' ? model : 'No active model'}</span></div><Badge tone={live ? 'healthy' : 'warning'}>{live ? 'Live' : 'Connecting'}</Badge><details className="a-user-menu" onKeyDown={(e) => { if (e.key === 'Escape') { e.currentTarget.open = false; e.currentTarget.querySelector('summary').focus() } }}><summary className="a-avatar" aria-label="User menu" title="User menu"><UserRound size={18} /></summary><div className="a-dropdown"><span className="a-nav-group">{profile?.name || 'Your workspace'}</span><Button variant="ghost" onClick={(e) => { e.currentTarget.closest('details').open = false; onNavigate('settings/account') }}><UserRound size={16} />Account</Button><Button variant="ghost" onClick={(e) => { e.currentTarget.closest('details').open = false; onNavigate('settings/appearance') }}><Settings size={16} />Appearance</Button><Button variant="ghost" onClick={onLogout}><LogOut size={16} />Log out</Button></div></details></div></header>
 }

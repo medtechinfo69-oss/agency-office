@@ -1,3 +1,4 @@
+import useDialog from './useDialog'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 
@@ -9,8 +10,9 @@ export default function NewProjectModal({ t, onClose, onCreate }) {
   const [template, setTemplate] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const dialogRef = useDialog(() => { if (!busy) onClose() })
 
-  useEffect(() => { api.templates().then(setTemplates).catch(() => {}) }, [])
+  useEffect(() => { api.templates().then(setTemplates).catch(() => setErr('Templates could not be loaded. You can still start with a brief.')) }, [])
 
   const ready = brief.trim() || template
 
@@ -30,8 +32,8 @@ export default function NewProjectModal({ t, onClose, onCreate }) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal np-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" onClick={() => { if (!busy) onClose() }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={t('newProject')} tabIndex={-1} className="modal np-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div className="np-title">
             <span className="np-icon" aria-hidden="true">🆕</span>
@@ -40,28 +42,28 @@ export default function NewProjectModal({ t, onClose, onCreate }) {
               <div className="np-sub">Nora turns your brief into a plan — you approve before any work starts</div>
             </div>
           </div>
-          <button className="ap-close" onClick={onClose} aria-label="close">✕</button>
+          <button className="ap-close" onClick={() => { if (!busy) onClose() }} aria-label="close">✕</button>
         </div>
 
-        <form className="modal-body np-form" onSubmit={submit}>
+        <form aria-busy={busy} className="modal-body np-form" onSubmit={submit}>
           <label className="np-field">
             <span className="np-label">{t('project')} name</span>
             <input value={name} onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Summer campaign"
-              autoFocus />
+              data-dialog-focus="true" />
           </label>
 
           <div className="np-field">
             <span className="np-label">{t('templates')}</span>
-            <div className="np-chips" role="radiogroup" aria-label="templates">
+            <div className="np-chips" role="group" aria-label="templates">
               <button type="button"
-                className={'np-chip' + (template ? '' : ' on')}
+                aria-pressed={!template} className={'np-chip' + (template ? '' : ' on')}
                 onClick={() => setTemplate('')}>
                 ✨ Blank
               </button>
               {templates.map((tp) => (
                 <button type="button" key={tp.id}
-                  className={'np-chip' + (template === tp.id ? ' on' : '')}
+                  aria-pressed={template === tp.id} className={'np-chip' + (template === tp.id ? ' on' : '')}
                   onClick={() => setTemplate(template === tp.id ? '' : tp.id)}>
                   {tp.name}
                 </button>
@@ -80,10 +82,10 @@ export default function NewProjectModal({ t, onClose, onCreate }) {
             </span>
           </label>
 
-          {err && <div className="np-err">⚠ {err}</div>}
+          {err && <div className="np-err" role="alert">⚠ {err}</div>}
 
           <div className="np-footer">
-            <button type="button" className="btn ghost" onClick={onClose}>{t('close')}</button>
+            <button type="button" className="btn ghost" disabled={busy} onClick={() => { if (!busy) onClose() }}>{t('close')}</button>
             <button className="btn primary" disabled={busy || !ready}>
               {busy ? t('running') : `${t('create')} →`}
             </button>

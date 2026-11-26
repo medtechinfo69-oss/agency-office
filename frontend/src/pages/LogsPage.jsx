@@ -6,6 +6,13 @@ import { Empty, Segmented } from '../components/ui'
 export default function LogsPage({ t, log, onRefresh }) {
   const [q, setQ] = useState('')
   const [lvl, setLvl] = useState('all')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const refresh = async () => {
+    setBusy(true); setError('')
+    try { await onRefresh() } catch (e) { setError(e.message) }
+    finally { setBusy(false) }
+  }
 
   const rows = useMemo(() => {
     let list = [...log].reverse()
@@ -19,7 +26,7 @@ export default function LogsPage({ t, log, onRefresh }) {
       <div className="logs-bar">
         <label className="search-box">
           <Search size={14} />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter events…" />
+          <input aria-label="Filter activity events" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter events…" />
         </label>
         <Segmented ariaLabel="level"
           options={[
@@ -29,9 +36,10 @@ export default function LogsPage({ t, log, onRefresh }) {
           ]}
           value={lvl} onChange={setLvl} />
         <span className="spacer" />
-        <button className="btn sm" onClick={onRefresh}><RefreshCw size={13} /> {t('refresh')}</button>
+        <button className="btn sm" disabled={busy} aria-busy={busy} onClick={refresh}><RefreshCw size={13} /> {t('refresh')}</button>
       </div>
 
+      {error && <div className="feedback-banner error" role="alert">Could not refresh activity: {error}</div>}
       <div className="logs-list card">
         {rows.length === 0 && <Empty icon="📜" title="No log entries" hint="Events from the crew appear here live." />}
         {rows.map((l, i) => (

@@ -60,6 +60,8 @@ export default function ShopPage({ t, agents, onRefresh }) {
   const [history, setHistory] = useState([])    // undo stack
   const [future, setFuture] = useState([])      // redo stack
   const [saved, setSaved] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
 
   const agent = agents.find((a) => a.id === agentId) || agents[0]
   const outfit = agent?.custom?.outfit || {}
@@ -72,7 +74,20 @@ export default function ShopPage({ t, agents, onRefresh }) {
     ? { char: sel, color: current.color }
     : { char: current.char, color: sel && tab === 'Colours' ? sel : current.color }
 
-  const apply = async () => {
+  const persist = async (next, afterSave) => {
+    if (!agent || busy) return
+    setBusy(true); setError('')
+    try {
+      await api.updateAgent(agent.id, { custom: { ...(agent.custom || {}), outfit: next } })
+      await onRefresh?.()
+      afterSave()
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2400)
+    } catch (e) { setError(`Could not save the outfit. ${e.message} Try again.`) }
+    finally { setBusy(false) }
+  }
+
+  const apply = () => {
     if (!agent || !sel) return
     const next = { ...outfit }
     if (tab === 'Characters') next.char = sel
@@ -81,32 +96,22 @@ export default function ShopPage({ t, agents, onRefresh }) {
     if (['Furniture', 'Decoration', 'Themes'].includes(tab)) {
       next.furniture = [...new Set([...(next.furniture || []), sel])]
     }
-    setHistory((h) => [...h, outfit])
-    setFuture([])
-    try {
-      await api.updateAgent(agent.id, { custom: { ...(agent.custom || {}), outfit: next } })
-      setSaved(true)
-      setTimeout(() => setSaved(false), 1600)
-      setSel(null)
-      onRefresh?.()
-    } catch (e) { console.error('apply failed', e) }
+    persist(next, () => {
+      setHistory((h) => [...h, outfit]); setFuture([]); setSel(null)
+    })
   }
 
   const undo = () => {
     if (!history.length) return
-    const prev = history[history.length - 1]
-    setHistory((h) => h.slice(0, -1))
-    setFuture((f) => [outfit, ...f])
-    api.updateAgent(agent.id, { custom: { ...(agent.custom || {}), outfit: prev } })
-      .then(() => onRefresh?.()).catch(() => {})
+    persist(history.at(-1), () => {
+      setHistory((h) => h.slice(0, -1)); setFuture((f) => [outfit, ...f])
+    })
   }
   const redo = () => {
     if (!future.length) return
-    const next = future[0]
-    setFuture((f) => f.slice(1))
-    setHistory((h) => [...h, outfit])
-    api.updateAgent(agent.id, { custom: { ...(agent.custom || {}), outfit: next } })
-      .then(() => onRefresh?.()).catch(() => {})
+    persist(future[0], () => {
+      setFuture((f) => f.slice(1)); setHistory((h) => [...h, outfit])
+    })
   }
 
   const items = useMemo(() => {
@@ -120,12 +125,14 @@ export default function ShopPage({ t, agents, onRefresh }) {
 
   return (
     <div className="page shop-page">
+      {error && <div className="feedback-banner error" role="alert">{error}</div>}
+      {!['Characters', 'Colours'].includes(tab) && <p className="feedback-banner">Catalog preview: selections are saved, but these items do not change the office scene.</p>}
       {/* agent chips */}
       <div className="shop-agents">
         {agents.map((a) => (
           <button key={a.id}
             className={`agent-chip ${a.id === agentId ? 'on' : ''}`}
-            onClick={() => { setAgentId(a.id); setSel(null) }}>
+            disabled={busy} aria-pressed={a.id === agentId} onClick={() => { setAgentId(a.id); setSel(null); setHistory([]); setFuture([]); setError('') }}>
             <AgentBot agentId={a.custom?.outfit?.char || a.id} size={26} color={a.color} />
             {a.name}
           </button>
@@ -159,7 +166,7 @@ export default function ShopPage({ t, agents, onRefresh }) {
               const owned = ['Furniture', 'Decoration', 'Themes', 'Accessories'].includes(tab) &&
                 (outfit.furniture || []).includes(it.id) || (tab === 'Accessories' && current.acc === it.id)
               return (
-                <article key={it.id}
+                <article key={it.id} role="button" tabIndex={0} aria-pressed={sel === it.id} onKeyDown={(e) => { if (['Enter', ' '].includes(e.key)) { e.preventDefault(); setSel(it.id) } }}
                   className={`shop-item card ${sel === it.id ? 'on' : ''} ${isCurrent ? 'current' : ''}`}
                   onClick={() => setSel(it.id)}>
                   <div className="si-cover" style={{ '--agent': agent.color }}>
@@ -187,16 +194,16 @@ export default function ShopPage({ t, agents, onRefresh }) {
 
           {/* save bar */}
           <div className="shop-savebar">
-            <button className="btn sm" onClick={undo} disabled={!history.length}>
+            <button className="btn sm" onClick={undo} disabled={busy || !history.length}>
               <Undo2 size={14} /> {t('undo')}
             </button>
-            <button className="btn sm" onClick={redo} disabled={!future.length}>
+            <button className="btn sm" onClick={redo} disabled={busy || !future.length}>
               <Redo2 size={14} /> {t('redo')}
             </button>
-            <span className={`save-flash ${saved ? 'on' : ''}`}>✔ {t('saved')}</span>
+            <span role="status" className={`save-flash ${saved ? 'on' : ''}`}>✔ {t('saved')}</span>
             <span className="spacer" />
-            <button className="btn primary" onClick={apply} disabled={!sel}>
-              <Check size={14} /> {t('apply')}
+            <button className="btn primary" onClick={apply} disabled={busy || !sel} aria-busy={busy}>
+              <Check size={14} /> {busy ? 'Saving…' : t('apply')}
             </button>
           </div>
         </div>

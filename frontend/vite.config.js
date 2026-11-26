@@ -4,10 +4,11 @@ import react from '@vitejs/plugin-react'
 // Both dev and the production preview proxy /api, /ws and /media to the
 // FastAPI backend, so the browser only ever talks to one origin (works
 // behind the Arena preview proxy too).
+const backend = process.env.API_PROXY_TARGET || 'http://localhost:8000'
 const proxy = {
-  '/api': { target: 'http://localhost:8000', changeOrigin: true },
-  '/ws': { target: 'ws://localhost:8000', ws: true },
-  '/media': { target: 'http://localhost:8000', changeOrigin: true },
+  '/api': { target: backend, changeOrigin: true },
+  '/ws': { target: backend.replace(/^http/, 'ws'), ws: true },
+  '/media': { target: backend, changeOrigin: true },
 }
 
 export default defineConfig({

@@ -7,6 +7,7 @@ for this workload.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -189,6 +190,31 @@ CREATE TABLE IF NOT EXISTS templates (
   meta TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS media_files (
+  path TEXT PRIMARY KEY,
+  data BLOB NOT NULL,
+  content_type TEXT NOT NULL,
+  updated_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cloud_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  payload TEXT NOT NULL,
+  created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cloud_runs (
+  project_id TEXT PRIMARY KEY,
+  phase TEXT NOT NULL,
+  brief TEXT NOT NULL,
+  plan TEXT NOT NULL DEFAULT '{}',
+  lease_until REAL NOT NULL DEFAULT 0,
+  lease_token TEXT NOT NULL DEFAULT '',
+  resume_phase TEXT NOT NULL DEFAULT 'tasks',
+  error TEXT NOT NULL DEFAULT '',
+  updated_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS meta_drafts (       -- Meta publishing: approval-gated
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
@@ -205,11 +231,17 @@ CREATE TABLE IF NOT EXISTS meta_drafts (       -- Meta publishing: approval-gate
 def get_conn() -> sqlite3.Connection:
     global _conn
     with _lock:
-        if _conn is None:
-            _conn = sqlite3.connect(settings.db_file, check_same_thread=False)
-            _conn.row_factory = sqlite3.Row
-            _conn.execute("PRAGMA journal_mode=WAL")
-            _conn.execute("PRAGMA foreign_keys=ON")
+        if _conn is None or getattr(_conn, 'closed', False):
+            if os.getenv('DATABASE_URL'):
+                from .postgres import Connection
+                _conn = Connection('agency_office')
+            else:
+                if os.getenv('VERCEL') == '1':
+                    raise RuntimeError('Vercel requires DATABASE_URL for durable Supabase Postgres storage.')
+                _conn = sqlite3.connect(settings.db_file, check_same_thread=False)
+                _conn.row_factory = sqlite3.Row
+                _conn.execute("PRAGMA journal_mode=WAL")
+                _conn.execute("PRAGMA foreign_keys=ON")
             _conn.executescript(SCHEMA)
             _conn.commit()
         return _conn

@@ -17,3 +17,10 @@ __pycache__/
 *.tmp
 screenshot-*.png
 screenshots/
+
+# Downloadable review/source bundles (generated, not application source)
+/deliverables/
+
+# Hosting credentials and local deployment state
+.vercel/
+.env.*.local

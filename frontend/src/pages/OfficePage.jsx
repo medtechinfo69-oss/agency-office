@@ -1,10 +1,11 @@
+import ApprovalActions from '../components/ApprovalActions'
 /* Office (home): stats strip · isometric scene · floor cards ·
    roster tree · Journal / Scheduled tabs · approval gates. */
 import { useEffect, useMemo, useState } from 'react'
-import { Clock, Play, Pause, CheckCircle2, XCircle } from 'lucide-react'
+import { Clock, Play, Pause } from 'lucide-react'
 import { api } from '../api'
 import IsometricOffice, { officeAction } from '../components/IsometricOffice'
-import { Kpi, StatusPill, Tabs, Empty } from '../components/ui'
+import { Kpi, StatusPill, Tabs, Empty, ActionButton } from '../components/ui'
 import { AgentBot } from '../components/Characters'
 
 const FLOORS = [
@@ -47,6 +48,10 @@ export default function OfficePage({
 
   return (
     <div className="page office-page">
+      {!projects.length && <div className="feedback-banner">
+        <div><strong>Welcome to your agency</strong><div>Create a project, share a brief, and review Nora’s plan before work begins.</div></div>
+        <button className="btn primary" onClick={onNewProject}>+ {t('newProject')}</button>
+      </div>}
       {/* stats strip */}
       <div className="stats-strip">
         <Kpi label="Active agents" value={activeAgents} sub={`of ${agents.length}`} />
@@ -75,14 +80,7 @@ export default function OfficePage({
                   </p>
                 )}
               </div>
-              <div className="approval-actions">
-                <button className="btn ghost" onClick={() => onApprove(approval.kind, false)}>
-                  <XCircle size={14} /> {t('reject')}
-                </button>
-                <button className="btn good" onClick={() => onApprove(approval.kind, true)}>
-                  <CheckCircle2 size={14} /> {t('approve')}
-                </button>
-              </div>
+              <ApprovalActions key={approval.kind} t={t} kind={approval.kind} onApprove={onApprove} />
             </div>
           )}
 
@@ -109,7 +107,7 @@ export default function OfficePage({
           <div className="floor-row">
             {FLOORS.map((f) => (
               <button key={f.id}
-                className={`floor-card ${floor === f.id ? 'on' : ''}`}
+                aria-pressed={floor === f.id} className={`floor-card ${floor === f.id ? 'on' : ''}`}
                 onClick={() => setFloor(f.id)}>
                 <span className="floor-emoji">{f.emoji}</span>
                 <span className="floor-meta">
@@ -160,13 +158,13 @@ export default function OfficePage({
             value={tab} onChange={setTab}
           />
           <div className="bb-actions">
-            <button className="btn sm" onClick={() => onControl(control === 'paused' ? 'resume' : 'pause')}>
+            <ActionButton className="btn sm" disabled={!projectId} onClick={() => onControl(control === 'paused' ? 'resume' : 'pause')}>
               {control === 'paused' ? <Play size={13} /> : <Pause size={13} />}
               {control === 'paused' ? t('resume') : t('pause')}
-            </button>
-            <button className="btn sm" onClick={onStandup}>🌅 {t('standup')}</button>
-            <button className="btn sm" onClick={() => onMeeting('Brainstorm: next best move')}>🧠 {t('meeting')}</button>
-            <button className="btn sm" onClick={onTrends}>🕵️ {t('trends')}</button>
+            </ActionButton>
+            <ActionButton className="btn sm" disabled={!projectId} onClick={onStandup}>🌅 {t('standup')}</ActionButton>
+            <ActionButton className="btn sm" disabled={!projectId} onClick={() => onMeeting('Brainstorm: next best move')}>🧠 {t('meeting')}</ActionButton>
+            <ActionButton className="btn sm" disabled={!projectId} onClick={onTrends}>🕵️ {t('trends')}</ActionButton>
           </div>
         </div>
 

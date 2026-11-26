@@ -51,7 +51,7 @@ function Workstation({ x, y }) {
           [x + 0.6, y + 0.24, 0.5], [x + 1.45, y + 0.24, 0.5],
           [x + 1.45, y + 0.24, 1.28], [x + 0.6, y + 0.24, 1.28],
         ])}
-        fill="#7dd3fc" opacity=".85" className="iso-screen"
+        fill="#7dd3fc" opacity=".85" className="iso-monitor"
       />
       {/* keyboard */}
       <Box x={x + 0.6} y={y + 0.75} w={0.85} d={0.35} h={0.05}
@@ -140,8 +140,8 @@ function AgentAtDesk({ agent, x, y, picked, onPick, speed }) {
       transform={`translate(${sx - 21}, ${sy - 74})`}
       onClick={() => onPick(agent.id)}
       data-agent={agent.id}
-      role="button" tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter') onPick(agent.id) }}
+      role="button" tabIndex={0} aria-label={`View ${agent.name}, ${st}`}
+      onKeyDown={(e) => { if (['Enter', ' '].includes(e.key)) { e.preventDefault(); onPick(agent.id) } }}
       style={{ '--spin': `${1.6 / (speed || 1)}s` }}
     >
       {/* full-size transparent hit area so clicks never fall through to desks */}
@@ -211,7 +211,7 @@ export default function IsometricOffice({
     <div className="iso-wrap" ref={wrapRef} style={{ '--iso-speed': `${1.4 / speed}s` }}>
       <div className="iso-scene-holder" style={{ transform: `scale(${zoom})` }}>
         <svg className="iso-scene" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet"
-          role="img" aria-label="Isometric agency office">
+          role="group" aria-label="Interactive agency office">
           {/* room shell */}
           <polygon points={pts([[0, 0], [13.6, 0], [13.6, 10.4], [0, 10.4]])}
             fill="var(--iso-floor)" />
