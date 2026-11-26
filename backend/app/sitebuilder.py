@@ -206,7 +206,7 @@ async def pull(body:Pull):
         except Exception: yield 'data: '+json.dumps({'error':'Pull failed. Check Ollama and network connection.'})+'\n\n'
     return StreamingResponse(stream(),media_type='text/event-stream',headers={'Cache-Control':'no-cache','X-Accel-Buffering':'no'})
 
-init()
+if os.getenv('VERCEL') != '1': init()
 
 def event(kind,**kwargs): return 'data: '+json.dumps({'type':kind,**kwargs},ensure_ascii=False)+'\n\n'
 

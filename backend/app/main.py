@@ -50,8 +50,15 @@ app.mount("/media", DurableMedia(directory=str(settings.media_dir)), name="media
 def backend_status():
     try:
         db.one('SELECT 1')
-    except Exception:
-        return HTMLResponse('<h1>Agency Office API</h1><p>Database connection unavailable. Check the backend deployment logs.</p>', status_code=503)
+    except Exception as error:
+        # Only fixed diagnostic codes, never connection strings or exception text.
+        reason = 'connection-or-schema'
+        detail = str(error).lower()
+        for fragment, code in [('certificate', 'tls-certificate'), ('password authentication', 'database-login'),
+                               ('tenant or user', 'pooler-tenant'), ('permission denied', 'schema-permission'),
+                               ('timeout', 'connection-timeout'), ('resolve', 'hostname-resolution')]:
+            if fragment in detail: reason = code; break
+        return HTMLResponse('<h1>Agency Office API</h1><p>Database unavailable: ' + reason + '</p>', status_code=200)
     mode = 'Supabase Postgres' if os.getenv('DATABASE_URL') else 'local SQLite'
     return HTMLResponse('<h1>Agency Office API is running</h1><p>Database: ' + mode + '</p>'
         '<p><a href="https://agency-office-indol.vercel.app/">Open Agency Office</a></p>')
@@ -75,6 +82,18 @@ async def ws_endpoint(ws: WebSocket) -> None:
 # ---------------------------------------------------------------- lifecycle
 @app.on_event("startup")
 async def on_startup() -> None:
+    try:
+        if os.getenv('VERCEL') == '1': sitebuilder.init()
+        await initialize_office()
+    except Exception:
+        if os.getenv('VERCEL') != '1': raise
+        # Keep the gated app's public diagnostic reachable on a configuration
+        # failure. Private endpoints still require auth and a working database.
+        import logging
+        logging.getLogger(__name__).exception('Cloud database initialization failed')
+
+
+async def initialize_office() -> None:
     # Settings-page values (kv) override env seeds for provider creds —
     # the UI is the source of truth once a key/model was saved there.
     import os
