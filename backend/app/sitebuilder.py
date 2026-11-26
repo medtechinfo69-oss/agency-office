@@ -14,7 +14,7 @@ load_dotenv(ROOT/'.env')
 from .config import settings as agency_settings
 DATA=agency_settings.data_dir
 DB=DATA/'siteforge.db'
-PROMPTS=ROOT/'prompts'/'sitebuilder'
+PROMPTS=Path(__file__).resolve().parents[1]/'prompts'/'sitebuilder'
 router=APIRouter()
 from . import db as agency_db
 # Intended for local use. Vite proxies all browser requests.

@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && useradd --uid 10001 --gid agency --no-create-home agency \
     && mkdir -p /data && chown agency:agency /data
 COPY backend/app /app/backend/app
-COPY prompts /app/prompts
+COPY backend/prompts /app/backend/prompts
 COPY deploy/start_backend.py /app/start_backend.py
 WORKDIR /app/backend
 EXPOSE 10000
