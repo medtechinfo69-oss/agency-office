@@ -1,7 +1,7 @@
 """Refresh server-side provider settings across warm serverless instances."""
 import os
 
-from .config import settings, PROVIDER_PRESETS
+from .config import settings, PROVIDER_PRESETS, provider_base_url
 
 
 def refresh():
@@ -12,6 +12,7 @@ def refresh():
         creds = settings.provider_creds.setdefault(key, {})
         for prefix, field in [('token', 'token'), ('model', 'model'), ('base', 'base_url'), ('image', 'image_model')]:
             if prefix + '_' + key in saved: creds[field] = saved[prefix + '_' + key]
+        creds['base_url'] = provider_base_url(key, creds.get('base_url') or PROVIDER_PRESETS[key]['base_url'])
     if saved.get('active_provider') in PROVIDER_PRESETS:
         settings.active_provider = saved['active_provider']
     active = settings.provider_creds.get(settings.active_provider, {})

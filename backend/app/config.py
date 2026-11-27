@@ -36,7 +36,7 @@ PROVIDER_PRESETS: dict[str, dict] = {
     "openai": {"label":"OpenAI", "base_url":"https://api.openai.com/v1", "model":"", "site":"https://platform.openai.com", "headers":{}, "free":False},
     "anthropic": {"label":"Anthropic Claude", "base_url":"https://api.anthropic.com/v1", "model":"", "site":"https://console.anthropic.com", "headers":{}, "free":False},
     "ollama_cloud": {"label": "Ollama Cloud", "base_url": "https://ollama.com/api", "model": "", "site": "https://ollama.com", "headers": {}, "free": False},
-    "arena": {"label": "Arena", "base_url": "https://platform.arena.ai/v1", "model": "", "site": "https://platform.arena.ai", "headers": {}, "free": False},
+    "arena": {"label": "Arena", "base_url": "https://api.arena.ai/v1", "model": "", "site": "https://platform.arena.ai", "headers": {}, "free": False},
     "openrouter": {
         "label": "OpenRouter",
         "base_url": "https://openrouter.ai/api/v1",
@@ -81,9 +81,26 @@ PROVIDER_PRESETS: dict[str, dict] = {
 }
 
 
+def provider_base_url(key: str, base_url: str) -> str:
+    """Repair only Arena's known first-party preset aliases, never custom gateways.
+
+    The dashboard host was shipped as the API host. Normalize old saved/env
+    values at read time; leave keys and persisted configuration untouched.
+    Official OpenAI-compatible API: https://platform.arena.ai/docs/api
+    """
+    base = base_url.strip().rstrip('/')
+    if key == 'arena' and base in (
+        'https://platform.arena.ai', 'https://platform.arena.ai/v1',
+        'https://api.arena.ai', 'https://api.arena.ai/v1',
+    ):
+        return 'https://api.arena.ai/v1'
+    return base
+
+
 def match_preset(base_url: str) -> str | None:
     """Map a base URL to a preset key (for legacy API_BASE_URL env vars)."""
-    host = (base_url or "").split("//")[-1].split("/")[0].lower()
+    base_url = provider_base_url('arena', base_url or '')
+    host = base_url.split("//")[-1].split("/")[0].lower()
     for key, p in PROVIDER_PRESETS.items():
         p_host = p["base_url"].split("//")[-1].split("/")[0].lower()
         if host and (host == p_host or host.endswith("." + p_host) or p_host.endswith(host)):
@@ -195,6 +212,8 @@ def _seed_provider_creds(s: "Settings") -> None:
                 creds[target]["base_url"] = _env("API_BASE_URL")
             if _env("TEXT_MODEL"):
                 creds[target]["model"] = _env("TEXT_MODEL")
+    for key, values in creds.items():
+        values['base_url'] = provider_base_url(key, values['base_url'])
     s.provider_creds = creds
     # active provider: env wins at load; kv may override at startup
     env_active = _env("ACTIVE_PROVIDER")

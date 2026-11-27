@@ -128,7 +128,8 @@ def save_provider(body: ProviderIn) -> list[dict]:
         db.kv_set(f"model_{body.provider}", creds["model"])
     if body.base_url is not None and body.base_url.strip():
         from ..ai_hub import validate_endpoint
-        creds["base_url"] = validate_endpoint(body.base_url.strip(), local=body.provider == "ollama")
+        from ..config import provider_base_url
+        creds["base_url"] = validate_endpoint(provider_base_url(body.provider, body.base_url), local=body.provider == "ollama")
         db.kv_set(f"base_{body.provider}", creds["base_url"])
     if body.image_model is not None:
         img = body.image_model.strip()

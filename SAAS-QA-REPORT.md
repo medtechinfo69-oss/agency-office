@@ -63,3 +63,9 @@ The expanded browser suite found missing `aria-valuenow` on two Builder resize s
 8. Manager advances are bounded request-driven operations, not a serverless background daemon. A durable queue/worker, crash reconciliation and full correction/retry workflow are required before selling unattended agency automation.
 9. Provision/verify domains and transport/email/monitoring separately. There is no claim of completed domain routing, email delivery, quota fault recovery, backup restoration drill, HA/load testing or SLA.
 10. Complete remaining UX/integration features and independent security review before representing the entire requested SaaS as production-ready. No payment integration is needed or planned.
+
+## Arena endpoint hotfix — subsequent release
+
+The shipped Arena preset incorrectly used `https://platform.arena.ai/v1` (dashboard), which caused `/models` HTTP 404. Official documentation at https://platform.arena.ai/docs/api specifies `https://api.arena.ai/v1` for OpenAI-compatible calls. Corrected the preset, environment/provider matching, saved-setting reads, discovery and inference. Only exact known first-party root/version aliases are normalized; custom gateways remain untouched. Stored keys and database settings are not rewritten. Connections now explains the endpoint and Arena errors distinguish API access denial from endpoint failure without echoing upstream bodies/secrets.
+
+Hotfix validation: **8 provider contract tests pass** (including five new Arena regressions); **101 backend tests pass, 4 PostgreSQL-dependent skips**; frontend lint/build pass; diff-check passes. Previous 114 browser scans and 8 disposable PostgreSQL tests describe the SaaS predecessor, not a new hotfix browser/PostgreSQL run. Live Arena credentials/inference remain untested; after deploying, reload Connections and run Test connection to fetch the key's actual available models.

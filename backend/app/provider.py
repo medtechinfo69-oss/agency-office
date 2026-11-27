@@ -22,7 +22,7 @@ from typing import Any, Optional
 
 import httpx
 
-from .config import settings
+from .config import settings, provider_base_url
 
 
 class ProviderError(Exception):
@@ -192,7 +192,7 @@ async def fetch_models(key: str, base_url: str, token: str) -> dict:
     headers = dict(preset.get("headers") or {})
     if token and key != "ollama":
         headers["Authorization"] = f"Bearer {token}"
-    base = base_url.rstrip("/")
+    base = provider_base_url(key, base_url)
     if key in ('openai','anthropic') and not base.endswith('/v1'): base += '/v1'
     if key == 'anthropic':
         headers.pop('Authorization',None)
@@ -259,10 +259,12 @@ async def fetch_models(key: str, base_url: str, token: str) -> dict:
             out["error"] = f"cannot reach {base} ({type(e).__name__}){hint}"
             return out
         if r.status_code in (401, 403):
-            out["error"] = "invalid API key"
+            out["error"] = (f"Arena authentication or API access denied (HTTP {r.status_code}). Check the Arena API key and workspace API permissions."
+                            if key == 'arena' else "invalid API key")
             return out
         if r.status_code >= 400:
-            out["error"] = f"/models returned HTTP {r.status_code}"
+            out["error"] = ("Arena model discovery returned HTTP 404. Use https://api.arena.ai/v1 as the API endpoint, not the dashboard URL. If using a custom gateway, verify its /models route."
+                            if key == 'arena' and r.status_code == 404 else f"/models returned HTTP {r.status_code}")
             return out
         try:
             payload = r.json()
@@ -308,7 +310,7 @@ class OpenAIProvider(BaseProvider):
         self.cfg = cfg or active_config()
         if self.cfg is None:
             raise ProviderError("bad_request", "no AI provider configured (no API token)")
-        self.base = self.cfg.base_url.rstrip("/")
+        self.base = provider_base_url(self.cfg.key, self.cfg.base_url)
         if self.cfg.key in ('openai','anthropic') and not self.base.endswith('/v1'):self.base += '/v1'
         # local CPU generations (Ollama) need the full local budget — the
         # outer asyncio wait_for(LOCAL_TIMEOUT) still caps the whole call
